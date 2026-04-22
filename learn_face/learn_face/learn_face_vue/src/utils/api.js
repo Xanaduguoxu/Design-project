@@ -513,3 +513,42 @@ export async function getTaskNamesAPI() {
 export async function selectTaskAPI(name) {
   return apiRequest(`/task/selectTask?name=${name}`)
 }
+
+// 错题本列表
+export async function getWrongQuestionListAPI(params) {
+  return apiRequest('/wrong/list', {
+    method: 'POST',
+    body: JSON.stringify(params)
+  })
+}
+
+// 错题本客观题练习提交
+export async function submitWrongObjectiveAPI(data) {
+  return apiRequest('/wrong/practice/objective', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  })
+}
+
+// 错题本主观题自评提交
+export async function submitWrongSubjectiveAPI(data) {
+  return apiRequest('/wrong/practice/subjective', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  })
+}
+
+// 错题本批量移除
+export async function deleteWrongQuestionsAPI(ids) {
+  return apiRequest('/wrong/delBatch', {
+    method: 'POST',
+    body: JSON.stringify({ ids })
+  })
+}
+
+// 错题本移除全部已掌握
+export async function deleteMasteredWrongQuestionsAPI() {
+  return apiRequest('/wrong/delMastered', {
+    method: 'POST'
+  })
+}

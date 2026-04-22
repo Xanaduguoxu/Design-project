@@ -12,7 +12,12 @@
 
         <el-col :span="12">
           <el-menu mode="horizontal" :default-active="route.path" class="nav-menu">
-            <el-menu-item v-for="item in navMenu" :key="item.index" :index="item.index" @click="handleMenuClick(item)">
+            <el-menu-item
+              v-for="item in navMenu"
+              :key="item.index"
+              :index="item.index"
+              @click="handleMenuClick(item)"
+            >
               {{ item.label }}
             </el-menu-item>
           </el-menu>
@@ -23,22 +28,24 @@
             <template v-if="userStore.isLoggedIn">
               <el-dropdown trigger="hover">
                 <el-button text class="user-btn">
-                  <el-avatar :size="32" :src="userStore.user.avatar" class="user-avatar">
+                  <el-avatar :size="32" :src="userStore.user?.avatar" class="user-avatar">
                     <template #default>
                       {{ userInitial }}
                     </template>
                   </el-avatar>
-                  <span class="user-name">{{ userStore.user.nickname || userStore.user.username }}</span>
+                  <span class="user-name">{{ userStore.user?.nickname || userStore.user?.username }}</span>
                   <el-icon class="el-icon--right">
                     <ArrowDown />
                   </el-icon>
                 </el-button>
+
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item @click="router.push('/goal')">目标管理</el-dropdown-item>
+                    <el-dropdown-item @click="router.push('/wrongbook')">错题本</el-dropdown-item>
                     <el-dropdown-item @click="router.push('/learningAnalysis')">学习分析</el-dropdown-item>
                     <el-dropdown-item @click="router.push('/profile')">个人中心</el-dropdown-item>
-                    <el-dropdown-item @click="router.push('/face')">人脸注册</el-dropdown-item>
+                    <el-dropdown-item @click="router.push('/face')">人脸录入</el-dropdown-item>
                     <el-dropdown-item divided @click="logout">退出登录</el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
@@ -54,18 +61,24 @@
       </el-row>
     </div>
 
-    <!-- 登录/注册 弹窗 -->
-    <el-dialog v-model="showAuthDialog" title="" width="400px" :show-close="true" class="minimal-auth-dialog" center
-      :close-on-click-modal="true" :modal-class="'minimal-modal-backdrop'" :append-to-body="false"
-      @close="handleDialogClose">
+    <el-dialog
+      v-model="showAuthDialog"
+      title=""
+      width="400px"
+      :show-close="true"
+      class="minimal-auth-dialog"
+      center
+      :close-on-click-modal="true"
+      :modal-class="'minimal-modal-backdrop'"
+      :append-to-body="false"
+      @close="handleDialogClose"
+    >
       <div class="auth-container">
-
         <div class="header-titles">
           <h2 class="main-title">{{ modalTitle }}</h2>
           <p class="sub-title">{{ modalSubTitle }}</p>
         </div>
 
-        <!-- 极简三状态 Tabs -->
         <div class="auth-tabs">
           <div class="tab-item" :class="{ active: activeTab === 'login' }" @click="switchTab('login')">
             <span>账号登录</span>
@@ -81,26 +94,43 @@
 
         <div class="form-container">
           <transition name="fade-slide" mode="out-in">
-
-            <!-- 1. 账号登录表单 -->
             <div v-if="activeTab === 'login'" key="login" class="form-panel">
-              <el-form :model="loginForm" :rules="loginRules" ref="loginFormRef" class="auth-form"
-                @submit.prevent="handleLogin">
+              <el-form
+                ref="loginFormRef"
+                :model="loginForm"
+                :rules="loginRules"
+                class="auth-form"
+                @submit.prevent="handleLogin"
+              >
                 <div class="input-group">
                   <label class="minimal-label">账号</label>
                   <el-form-item prop="email">
-                    <el-input ref="firstLoginInputRef" v-model="loginForm.email" placeholder="请输入账号" size="large"
-                      @keyup.enter="handleLogin" :disabled="loading" class="minimal-input" clearable>
-                    </el-input>
+                    <el-input
+                      ref="firstLoginInputRef"
+                      v-model="loginForm.email"
+                      placeholder="请输入账号"
+                      size="large"
+                      :disabled="loading"
+                      class="minimal-input"
+                      clearable
+                      @keyup.enter="handleLogin"
+                    />
                   </el-form-item>
                 </div>
 
                 <div class="input-group">
                   <label class="minimal-label">密码</label>
                   <el-form-item prop="password">
-                    <el-input v-model="loginForm.password" type="password" placeholder="请输入密码" show-password
-                      size="large" @keyup.enter="handleLogin" :disabled="loading" class="minimal-input">
-                    </el-input>
+                    <el-input
+                      v-model="loginForm.password"
+                      type="password"
+                      placeholder="请输入密码"
+                      show-password
+                      size="large"
+                      :disabled="loading"
+                      class="minimal-input"
+                      @keyup.enter="handleLogin"
+                    />
                   </el-form-item>
                 </div>
 
@@ -108,29 +138,39 @@
                   <label class="minimal-label">验证码</label>
                   <div class="captcha-flex">
                     <el-form-item prop="captcha" class="captcha-form-item">
-                      <el-input v-model="loginForm.captcha" placeholder="4位字符" size="large" @keyup.enter="handleLogin"
-                        :disabled="loading" class="minimal-input" maxlength="4">
-                      </el-input>
+                      <el-input
+                        v-model="loginForm.captcha"
+                        placeholder="4位字符"
+                        size="large"
+                        :disabled="loading"
+                        class="minimal-input"
+                        maxlength="4"
+                        @keyup.enter="handleLogin"
+                      />
                     </el-form-item>
-                    <div class="captcha-canvas-container" @click="handleRefreshLoginCaptcha" title="点击刷新">
+                    <div class="captcha-canvas-container" title="点击刷新" @click="handleRefreshLoginCaptcha">
                       <canvas ref="loginCaptchaRef" width="110" height="48"></canvas>
                     </div>
                   </div>
                 </div>
 
-                <el-button @click="handleLogin" :loading="loading" type="primary" size="large"
-                  class="minimal-submit-btn" :disabled="!isLoginFormValid">
+                <el-button
+                  type="primary"
+                  size="large"
+                  class="minimal-submit-btn"
+                  :loading="loading"
+                  :disabled="!isLoginFormValid"
+                  @click="handleLogin"
+                >
                   <span v-if="!loading">登录</span>
                   <span v-else>登录中...</span>
                 </el-button>
               </el-form>
             </div>
 
-            <!-- 2. 人脸登录面板 -->
             <div v-else-if="activeTab === 'face'" key="face" class="form-panel face-login-panel">
               <div class="camera-wrapper">
                 <video ref="videoRef" autoplay playsinline class="face-video"></video>
-                <!-- 扫描框装饰 -->
                 <div class="scan-overlay">
                   <div class="scan-corner top-left"></div>
                   <div class="scan-corner top-right"></div>
@@ -139,42 +179,71 @@
                 </div>
               </div>
 
-              <el-button @click="handleFaceLogin" :loading="loading" type="primary" size="large"
-                class="minimal-submit-btn face-btn">
+              <el-button
+                type="primary"
+                size="large"
+                class="minimal-submit-btn face-btn"
+                :loading="loading"
+                @click="handleFaceLogin"
+              >
                 <span v-if="!loading">立即刷脸登录</span>
-                <span v-else>正在识别...</span>
+                <span v-else>识别中...</span>
               </el-button>
-              <p class="face-tips">请确保光线充足，正对摄像头</p>
+              <p class="face-tips">请保证光线充足，并正对摄像头</p>
             </div>
 
-            <!-- 3. 注册表单 -->
             <div v-else key="register" class="form-panel">
-              <el-form :model="registerForm" :rules="registerRules" ref="registerFormRef" class="auth-form"
-                @submit.prevent="handleRegister">
+              <el-form
+                ref="registerFormRef"
+                :model="registerForm"
+                :rules="registerRules"
+                class="auth-form"
+                @submit.prevent="handleRegister"
+              >
                 <div class="input-group">
                   <label class="minimal-label">设置账号</label>
                   <el-form-item prop="email">
-                    <el-input ref="firstRegisterInputRef" v-model="registerForm.email" placeholder="至少2位字符" size="large"
-                      :disabled="loading" class="minimal-input" @input="validateEmailRealtime" clearable>
-                    </el-input>
+                    <el-input
+                      ref="firstRegisterInputRef"
+                      v-model="registerForm.email"
+                      placeholder="至少2位字符"
+                      size="large"
+                      :disabled="loading"
+                      class="minimal-input"
+                      clearable
+                      @input="validateEmailRealtime"
+                    />
                   </el-form-item>
                 </div>
 
                 <div class="input-group">
                   <label class="minimal-label">设置密码</label>
                   <el-form-item prop="password">
-                    <el-input v-model="registerForm.password" type="password" placeholder="至少6位字符" show-password
-                      size="large" :disabled="loading" class="minimal-input">
-                    </el-input>
+                    <el-input
+                      v-model="registerForm.password"
+                      type="password"
+                      placeholder="至少6位字符"
+                      show-password
+                      size="large"
+                      :disabled="loading"
+                      class="minimal-input"
+                    />
                   </el-form-item>
                 </div>
 
                 <div class="input-group">
                   <label class="minimal-label">确认密码</label>
                   <el-form-item prop="confirmPassword">
-                    <el-input v-model="registerForm.confirmPassword" type="password" placeholder="请再次输入密码" show-password
-                      size="large" :disabled="loading" class="minimal-input" @input="validatePasswordMatch">
-                    </el-input>
+                    <el-input
+                      v-model="registerForm.confirmPassword"
+                      type="password"
+                      placeholder="请再次输入密码"
+                      show-password
+                      size="large"
+                      :disabled="loading"
+                      class="minimal-input"
+                      @input="validatePasswordMatch"
+                    />
                   </el-form-item>
                 </div>
 
@@ -182,18 +251,30 @@
                   <label class="minimal-label">验证码</label>
                   <div class="captcha-flex">
                     <el-form-item prop="captcha" class="captcha-form-item">
-                      <el-input v-model="registerForm.captcha" placeholder="4位字符" size="large"
-                        @keyup.enter="handleRegister" :disabled="loading" class="minimal-input" maxlength="4">
-                      </el-input>
+                      <el-input
+                        v-model="registerForm.captcha"
+                        placeholder="4位字符"
+                        size="large"
+                        :disabled="loading"
+                        class="minimal-input"
+                        maxlength="4"
+                        @keyup.enter="handleRegister"
+                      />
                     </el-form-item>
-                    <div class="captcha-canvas-container" @click="handleRefreshRegisterCaptcha" title="点击刷新">
+                    <div class="captcha-canvas-container" title="点击刷新" @click="handleRefreshRegisterCaptcha">
                       <canvas ref="registerCaptchaRef" width="110" height="48"></canvas>
                     </div>
                   </div>
                 </div>
 
-                <el-button @click="handleRegister" :loading="loading" type="primary" size="large"
-                  class="minimal-submit-btn" :disabled="!isRegisterFormValid">
+                <el-button
+                  type="primary"
+                  size="large"
+                  class="minimal-submit-btn"
+                  :loading="loading"
+                  :disabled="!isRegisterFormValid"
+                  @click="handleRegister"
+                >
                   <span v-if="!loading">创建账户</span>
                   <span v-else>创建中...</span>
                 </el-button>
@@ -207,22 +288,22 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, getCurrentInstance, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, getCurrentInstance } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import { ElMessage } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
-import { loginAPI, registerAPI, apiRequest, faceLoginAPI } from '../utils/api'
+import { loginAPI, registerAPI, faceLoginAPI } from '../utils/api'
 
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
 
-const { proxy } = getCurrentInstance()
-const emitter = proxy.$emitter
+const instance = getCurrentInstance()
+const emitter = instance?.proxy?.$emitter || null
 
 const showAuthDialog = ref(false)
-const activeTab = ref('login') // 'login', 'face', 'register'
+const activeTab = ref('login')
 const loading = ref(false)
 const emailValidated = ref(false)
 const passwordMatched = ref(false)
@@ -241,19 +322,31 @@ const videoRef = ref(null)
 const loginCaptchaCode = ref('')
 const registerCaptchaCode = ref('')
 
-let mediaStream = null // 保存摄像头流
+let mediaStream = null
 
-const loginForm = reactive({ email: '', password: '', captcha: '' })
-const registerForm = reactive({ email: '', password: '', confirmPassword: '', captcha: '' })
+const loginForm = reactive({
+  email: '',
+  password: '',
+  captcha: ''
+})
+
+const registerForm = reactive({
+  email: '',
+  password: '',
+  confirmPassword: '',
+  captcha: ''
+})
 
 const appTitle = computed(() => import.meta.env.VITE_APP_TITLE || '平台')
 
 const navMenu = computed(() => {
   try {
     const menuConfig = import.meta.env.VITE_NAV_MENU
-    if (menuConfig) return JSON.parse(menuConfig)
+    if (menuConfig) {
+      return JSON.parse(menuConfig)
+    }
   } catch (error) {
-    console.error('解析配置失败:', error)
+    console.error('解析导航配置失败:', error)
   }
   return []
 })
@@ -270,22 +363,23 @@ const modalTitle = computed(() => {
 })
 
 const modalSubTitle = computed(() => {
-  if (activeTab.value === 'register') return '加入我们，开启新体验'
-  if (activeTab.value === 'face') return '请正对摄像头进行面部识别'
-  return '输入您的账号以继续'
+  if (activeTab.value === 'register') return '加入平台，开始你的学习之旅'
+  if (activeTab.value === 'face') return '请正对摄像头进行人脸识别'
+  return '输入账号密码继续'
 })
 
 const generateRandomString = (length = 4) => {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
   let result = ''
-  for (let i = 0; i < length; i++) {
+  for (let i = 0; i < length; i += 1) {
     result += chars.charAt(Math.floor(Math.random() * chars.length))
   }
   return result
 }
 
 const drawCaptcha = (canvasElement, text) => {
-  if (!canvasElement) return
+  if (!canvasElement || !text) return
+
   const ctx = canvasElement.getContext('2d')
   const width = canvasElement.width
   const height = canvasElement.height
@@ -294,16 +388,16 @@ const drawCaptcha = (canvasElement, text) => {
   ctx.fillStyle = '#f5f5f7'
   ctx.fillRect(0, 0, width, height)
 
-  for (let i = 0; i < 4; i++) {
-    ctx.strokeStyle = `rgba(0,0,0,0.1)`
+  for (let i = 0; i < 4; i += 1) {
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)'
     ctx.beginPath()
     ctx.moveTo(Math.random() * width, Math.random() * height)
     ctx.lineTo(Math.random() * width, Math.random() * height)
     ctx.stroke()
   }
 
-  for (let i = 0; i < 20; i++) {
-    ctx.fillStyle = `rgba(0,0,0,0.15)`
+  for (let i = 0; i < 20; i += 1) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.15)'
     ctx.beginPath()
     ctx.arc(Math.random() * width, Math.random() * height, 1, 0, 2 * Math.PI)
     ctx.fill()
@@ -311,11 +405,11 @@ const drawCaptcha = (canvasElement, text) => {
 
   ctx.font = 'bold 24px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
   ctx.textBaseline = 'middle'
-  for (let i = 0; i < text.length; i++) {
-    ctx.fillStyle = `#1d1d1f`
+  for (let i = 0; i < text.length; i += 1) {
+    ctx.fillStyle = '#1d1d1f'
     const x = 22 * i + 12
     const y = height / 2 + (Math.random() * 4 - 2)
-    const deg = (Math.random() * 40 - 20) * Math.PI / 180
+    const deg = ((Math.random() * 40 - 20) * Math.PI) / 180
 
     ctx.translate(x, y)
     ctx.rotate(deg)
@@ -326,140 +420,328 @@ const drawCaptcha = (canvasElement, text) => {
 }
 
 const refreshLoginCaptcha = () => {
-  loginCaptchaCode.value = generateRandomString()
+  loginCaptchaCode.value = generateRandomString(4)
   drawCaptcha(loginCaptchaRef.value, loginCaptchaCode.value)
 }
 
 const refreshRegisterCaptcha = () => {
-  registerCaptchaCode.value = generateRandomString()
+  registerCaptchaCode.value = generateRandomString(4)
   drawCaptcha(registerCaptchaRef.value, registerCaptchaCode.value)
 }
 
-const handleRefreshLoginCaptcha = () => { refreshLoginCaptcha(); loginForm.captcha = '' }
-const handleRefreshRegisterCaptcha = () => { refreshRegisterCaptcha(); registerForm.captcha = '' }
+const handleRefreshLoginCaptcha = () => {
+  refreshLoginCaptcha()
+  loginForm.captcha = ''
+}
+
+const handleRefreshRegisterCaptcha = () => {
+  refreshRegisterCaptcha()
+  registerForm.captcha = ''
+}
 
 const isLoginFormValid = computed(() => {
-  return loginForm.email && loginForm.password && loginForm.password.length >= 6 &&
-    loginForm.captcha.length === 4 && loginForm.captcha.toLowerCase() === loginCaptchaCode.value.toLowerCase()
+  return (
+    !!loginForm.email &&
+    !!loginForm.password &&
+    loginForm.password.length >= 6 &&
+    loginForm.captcha.length === 4 &&
+    loginForm.captcha.toLowerCase() === loginCaptchaCode.value.toLowerCase()
+  )
 })
 
 const isRegisterFormValid = computed(() => {
-  return registerForm.email && registerForm.password && registerForm.confirmPassword &&
-    registerForm.password === registerForm.confirmPassword && registerForm.captcha.length === 4 &&
+  return (
+    !!registerForm.email &&
+    !!registerForm.password &&
+    registerForm.password.length >= 6 &&
+    registerForm.password === registerForm.confirmPassword &&
+    registerForm.captcha.length === 4 &&
     registerForm.captcha.toLowerCase() === registerCaptchaCode.value.toLowerCase()
+  )
 })
 
 const validateConfirmPassword = (rule, value, callback) => {
-  if (value !== registerForm.password) callback(new Error('两次输入的密码不一致'))
-  else callback()
+  if (value !== registerForm.password) {
+    callback(new Error('两次输入的密码不一致'))
+    return
+  }
+  callback()
 }
 
 const validateLoginCaptcha = (rule, value, callback) => {
-  if (!value) callback(new Error('请输入验证码'))
-  else if (value.toLowerCase() !== loginCaptchaCode.value.toLowerCase()) callback(new Error('验证码错误'))
-  else callback()
+  if (!value) {
+    callback(new Error('请输入验证码'))
+    return
+  }
+  if (value.toLowerCase() !== loginCaptchaCode.value.toLowerCase()) {
+    callback(new Error('验证码错误'))
+    return
+  }
+  callback()
 }
 
 const validateRegisterCaptcha = (rule, value, callback) => {
-  if (!value) callback(new Error('请输入验证码'))
-  else if (value.toLowerCase() !== registerCaptchaCode.value.toLowerCase()) callback(new Error('验证码错误'))
-  else callback()
+  if (!value) {
+    callback(new Error('请输入验证码'))
+    return
+  }
+  if (value.toLowerCase() !== registerCaptchaCode.value.toLowerCase()) {
+    callback(new Error('验证码错误'))
+    return
+  }
+  callback()
 }
 
 const loginRules = reactive({
   email: [{ required: true, message: '请输入账号', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }, { min: 6, message: '不能少于6位', trigger: ['blur', 'change'] }],
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { min: 6, message: '密码不能少于6位', trigger: ['blur', 'change'] }
+  ],
   captcha: [{ required: true, validator: validateLoginCaptcha, trigger: 'blur' }]
 })
 
 const registerRules = reactive({
-  email: [{ required: true, message: '请输入账号', trigger: 'blur' }, { min: 2, message: '至少2位', trigger: ['blur', 'change'] }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }, { min: 6, max: 20, message: '6-20位之间', trigger: ['blur', 'change'] }],
-  confirmPassword: [{ required: true, message: '请确认密码', trigger: 'blur' }, { validator: validateConfirmPassword, trigger: ['blur', 'change'] }],
+  email: [
+    { required: true, message: '请输入账号', trigger: 'blur' },
+    { min: 2, message: '账号至少2位', trigger: ['blur', 'change'] }
+  ],
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { min: 6, max: 20, message: '密码长度为6-20位', trigger: ['blur', 'change'] }
+  ],
+  confirmPassword: [
+    { required: true, message: '请确认密码', trigger: 'blur' },
+    { validator: validateConfirmPassword, trigger: ['blur', 'change'] }
+  ],
   captcha: [{ required: true, validator: validateRegisterCaptcha, trigger: 'blur' }]
 })
 
-// === WebRTC 摄像头控制逻辑 ===
-// === WebRTC 摄像头控制逻辑 ===
 const startCamera = async () => {
   try {
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      // 获取摄像头画面流
-      mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: 640, height: 480 }
-      })
-
-      // 【关键修复】：利用轮询机制，等待 Vue 的 transition 过渡动画结束
-      // 如果 videoRef.value 还没渲染出来，就每隔 50ms 重新尝试绑定
-      const tryAttachStream = () => {
-        if (videoRef.value) {
-          // DOM 元素已存在，安全绑定画面
-          videoRef.value.srcObject = mediaStream
-        } else if (activeTab.value === 'face' && showAuthDialog.value) {
-          // 如果还是处于刷脸 Tab 且弹窗没关，继续等待 DOM 渲染
-          setTimeout(tryAttachStream, 50)
-        } else {
-          // 如果用户光速切走了 Tab，直接释放刚刚获取的流
-          stopCamera()
-        }
-      }
-
-      tryAttachStream()
-
-    } else {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       ElMessage.error('当前浏览器不支持摄像头调用')
+      return
     }
+
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: 640, height: 480 }
+    })
+
+    const tryAttachStream = () => {
+      if (videoRef.value) {
+        videoRef.value.srcObject = mediaStream
+      } else if (activeTab.value === 'face' && showAuthDialog.value) {
+        setTimeout(tryAttachStream, 50)
+      } else {
+        stopCamera()
+      }
+    }
+
+    tryAttachStream()
   } catch (error) {
-    console.error("Camera access error:", error)
+    console.error('Camera access error:', error)
     ElMessage.error('无法访问摄像头，请检查浏览器权限设置')
   }
 }
 
 const stopCamera = () => {
-  if (mediaStream) {
-    mediaStream.getTracks().forEach(track => track.stop())
-    mediaStream = null
-  }
+  if (!mediaStream) return
+  mediaStream.getTracks().forEach((track) => track.stop())
+  mediaStream = null
 }
 
-// 监听弹窗关闭，一定要关闭摄像头
 const handleDialogClose = () => {
   stopCamera()
   resetForms()
+  activeTab.value = 'login'
+}
+
+const focusFirstInput = () => {
+  if (activeTab.value === 'login' && firstLoginInputRef.value) {
+    firstLoginInputRef.value.focus()
+  }
+  if (activeTab.value === 'register' && firstRegisterInputRef.value) {
+    firstRegisterInputRef.value.focus()
+  }
+}
+
+const resetForms = () => {
+  loginForm.email = ''
+  loginForm.password = ''
+  loginForm.captcha = ''
+  registerForm.email = ''
+  registerForm.password = ''
+  registerForm.confirmPassword = ''
+  registerForm.captcha = ''
+  emailValidated.value = false
+  passwordMatched.value = false
+  loading.value = false
+  nextTick(() => {
+    loginFormRef.value?.clearValidate()
+    registerFormRef.value?.clearValidate()
+  })
 }
 
 const switchTab = (tabName) => {
-  if (activeTab.value === tabName) return
-  activeTab.value = tabName
-
-  // 切换离开刷脸 Tab 时，关闭摄像头
-  if (tabName !== 'face') {
-    stopCamera()
-    resetForms()
-    setTimeout(() => {
-      if (tabName === 'login') { refreshLoginCaptcha(); focusFirstInput() }
-      if (tabName === 'register') { refreshRegisterCaptcha(); focusFirstInput() }
-    }, 100)
-  } else {
-    // 切换到刷脸 Tab 时，开启摄像头
-    nextTick(() => {
-      startCamera()
-    })
+  if (activeTab.value === tabName) {
+    if (tabName === 'face' && showAuthDialog.value) {
+      nextTick(() => startCamera())
+    }
+    return
   }
+
+  if (activeTab.value === 'face' && tabName !== 'face') {
+    stopCamera()
+  }
+
+  activeTab.value = tabName
+  resetForms()
+
+  nextTick(() => {
+    if (tabName === 'login') {
+      refreshLoginCaptcha()
+      focusFirstInput()
+    }
+    if (tabName === 'register') {
+      refreshRegisterCaptcha()
+      focusFirstInput()
+    }
+    if (tabName === 'face' && showAuthDialog.value) {
+      startCamera()
+    }
+  })
+}
+
+const openLoginDialog = () => {
+  showAuthDialog.value = true
+  switchTab('login')
+  nextTick(() => {
+    refreshLoginCaptcha()
+    focusFirstInput()
+  })
+}
+
+const openRegisterDialog = () => {
+  showAuthDialog.value = true
+  switchTab('register')
+  nextTick(() => {
+    refreshRegisterCaptcha()
+    focusFirstInput()
+  })
 }
 
 const handleMenuClick = (menuItem) => {
-  if (menuItem.index === '/' || menuItem.index === '/home') {
-    router.push(menuItem.index)
+  const path = menuItem?.index
+  if (!path) return
+
+  if (path === '/' || path === '/home') {
+    router.push(path)
     return
   }
+
   if (!userStore.isLoggedIn) {
-    pendingRoute.value = menuItem.index
+    pendingRoute.value = path
     openLoginDialog()
     ElMessage({ message: '请先登录后再访问该页面', type: 'warning', duration: 2000 })
-  } else {
-    router.push(menuItem.index)
+    return
   }
+
+  router.push(path)
+}
+
+const loginSuccessHelper = (userData) => {
+  userStore.login(userData)
+  loginAttempts.value = 0
+  showAuthDialog.value = false
+  stopCamera()
+  ElMessage({ message: `欢迎回来，${userData.nickname || userData.username || '用户'}`, type: 'success' })
+
+  if (pendingRoute.value) {
+    router.push(pendingRoute.value)
+    pendingRoute.value = null
+  }
+}
+
+const handleLogin = async () => {
+  if (loginAttempts.value >= maxLoginAttempts) {
+    ElMessage({ message: '尝试次数过多，请稍后重试', type: 'error' })
+    return
+  }
+  if (!loginFormRef.value) return
+
+  await loginFormRef.value.validate(async (valid) => {
+    if (!valid) return
+
+    loading.value = true
+    try {
+      const userData = await loginAPI(loginForm.email, loginForm.password)
+      if (!userData) return
+      loginSuccessHelper(userData)
+    } catch (error) {
+      loginAttempts.value += 1
+      handleRefreshLoginCaptcha()
+      ElMessage({ message: error.message || '登录失败，请检查账号和密码', type: 'error' })
+    } finally {
+      loading.value = false
+    }
+  })
+}
+
+const handleFaceLogin = async () => {
+  if (!videoRef.value) return
+  loading.value = true
+
+  const canvas = document.createElement('canvas')
+  canvas.width = videoRef.value.videoWidth
+  canvas.height = videoRef.value.videoHeight
+  const ctx = canvas.getContext('2d')
+  ctx.drawImage(videoRef.value, 0, 0, canvas.width, canvas.height)
+
+  const base64Image = canvas.toDataURL('image/jpeg', 0.8)
+  try {
+    const userData = await faceLoginAPI(base64Image)
+    if (!userData) return
+    loginSuccessHelper(userData)
+  } catch (error) {
+    ElMessage({ message: error.message || '未识别到有效人脸，请重试', type: 'error' })
+  } finally {
+    loading.value = false
+  }
+}
+
+const handleRegister = async () => {
+  if (!registerFormRef.value) return
+
+  await registerFormRef.value.validate(async (valid) => {
+    if (!valid) return
+
+    loading.value = true
+    try {
+      const result = await registerAPI(registerForm.email, registerForm.password)
+      if (result === true) {
+        userStore.login({ id: Date.now(), username: registerForm.email, email: registerForm.email })
+        showAuthDialog.value = false
+        ElMessage({ message: '注册成功，欢迎加入', type: 'success' })
+
+        if (pendingRoute.value) {
+          router.push(pendingRoute.value)
+          pendingRoute.value = null
+        }
+      }
+    } catch (error) {
+      handleRefreshRegisterCaptcha()
+      let errorMessage = '注册失败，请稍后重试'
+      if (error.message?.includes('重名') || error.message?.includes('已存在')) {
+        errorMessage = '该账号已被注册'
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+      ElMessage({ message: errorMessage, type: 'error' })
+    } finally {
+      loading.value = false
+    }
+  })
 }
 
 const logout = () => {
@@ -468,138 +750,49 @@ const logout = () => {
   router.push('/')
 }
 
-const resetForms = () => {
-  loginForm.email = ''; loginForm.password = ''; loginForm.captcha = ''
-  registerForm.email = ''; registerForm.password = ''; registerForm.confirmPassword = ''; registerForm.captcha = ''
-  emailValidated.value = false; passwordMatched.value = false; loading.value = false
-  nextTick(() => {
-    loginFormRef.value?.clearValidate()
-    registerFormRef.value?.clearValidate()
-  })
+const validateEmailRealtime = () => {
+  emailValidated.value = registerForm.email.trim().length >= 2
 }
 
-const focusFirstInput = () => {
-  if (activeTab.value === 'login' && firstLoginInputRef.value) firstLoginInputRef.value.focus()
-  else if (activeTab.value === 'register' && firstRegisterInputRef.value) firstRegisterInputRef.value.focus()
+const validatePasswordMatch = () => {
+  passwordMatched.value =
+    registerForm.password === registerForm.confirmPassword && registerForm.confirmPassword.length > 0
 }
 
-const openLoginDialog = () => {
-  showAuthDialog.value = true
-  switchTab('login')
+const handleApiLoginRequest = () => {
+  openLoginDialog()
 }
-
-const openRegisterDialog = () => {
-  showAuthDialog.value = true
-  switchTab('register')
-}
-
-// === 账号密码登录 ===
-const handleLogin = async () => {
-  if (loginAttempts.value >= maxLoginAttempts) return ElMessage({ message: '尝试次数过多，请稍后再试', type: 'error' })
-  if (!loginFormRef.value) return
-  await loginFormRef.value.validate(async (valid) => {
-    if (valid) {
-      loading.value = true
-      try {
-        const userData = await loginAPI(loginForm.email, loginForm.password)
-        console.log(userData)
-        if (!userData) return
-        loginSuccessHelper(userData)
-      } catch (error) {
-        loginAttempts.value++
-        handleRefreshLoginCaptcha()
-        ElMessage({ message: error.message || '登录失败，请检查账号和密码', type: 'error' })
-      } finally {
-        loading.value = false
-      }
-    }
-  })
-}
-
-// === 刷脸登录核心请求 ===
-const handleFaceLogin = async () => {
-  if (!videoRef.value) return
-  loading.value = true
-
-  // 1. 创建隐藏的 canvas 进行截图
-  const canvas = document.createElement('canvas')
-  canvas.width = videoRef.value.videoWidth
-  canvas.height = videoRef.value.videoHeight
-  const ctx = canvas.getContext('2d')
-  // 绘制当前视频帧
-  ctx.drawImage(videoRef.value, 0, 0, canvas.width, canvas.height)
-
-  // 2. 转换为 Base64 字符串
-  const base64Image = canvas.toDataURL('image/jpeg', 0.8)
-
-  try {
-    const userData = await faceLoginAPI(base64Image)
-    if (!userData) return
-    loginSuccessHelper(userData)
-  } catch (error) {
-    ElMessage({ message: error.response?.data?.message || error.message || '未识别到有效人脸，请重试', type: 'error' })
-  } finally {
-    loading.value = false
-  }
-}
-
-const loginSuccessHelper = (userData) => {
-  userStore.login(userData)
-  loginAttempts.value = 0
-  showAuthDialog.value = false
-  stopCamera()
-  ElMessage({ message: `欢迎回来，${userData.nickname || userData.username || '用户'}！`, type: 'success' })
-  if (pendingRoute.value) { router.push(pendingRoute.value); pendingRoute.value = null }
-}
-
-const handleRegister = async () => {
-  if (!registerFormRef.value) return
-  await registerFormRef.value.validate(async (valid) => {
-    if (valid) {
-      loading.value = true
-      try {
-        const result = await registerAPI(registerForm.email, registerForm.password)
-        if (result === true) {
-          userStore.login({ id: Date.now(), username: registerForm.email, email: registerForm.email })
-          showAuthDialog.value = false
-          ElMessage({ message: '注册成功！欢迎加入！', type: 'success' })
-          if (pendingRoute.value) { router.push(pendingRoute.value); pendingRoute.value = null }
-        }
-      } catch (error) {
-        handleRefreshRegisterCaptcha()
-        let errorMessage = '注册失败，请稍后重试'
-        if (error.message === '用户名重复!') errorMessage = '该账号已被注册'
-        else if (error.message) errorMessage = error.message
-        ElMessage({ message: errorMessage, type: 'error' })
-      } finally {
-        loading.value = false
-      }
-    }
-  })
-}
-
-const validateEmailRealtime = () => { emailValidated.value = registerForm.email.trim().length >= 2 }
-const validatePasswordMatch = () => { passwordMatched.value = registerForm.password === registerForm.confirmPassword && registerForm.confirmPassword.length > 0 }
-const handleApiLoginRequest = () => openLoginDialog()
 
 onMounted(() => {
-  if (emitter) {
-    emitter.on('openLoginFromFooter', (routePath) => { pendingRoute.value = routePath; openLoginDialog() })
-    emitter.on('openLoginFromHome', (routePath) => { pendingRoute.value = routePath; openLoginDialog() })
-    emitter.on('openRegisterFromHome', (routePath) => { pendingRoute.value = routePath; openRegisterDialog() })
+  if (emitter?.on) {
+    emitter.on('openLoginFromFooter', (routePath) => {
+      pendingRoute.value = routePath
+      openLoginDialog()
+    })
+    emitter.on('openLoginFromHome', (routePath) => {
+      pendingRoute.value = routePath
+      openLoginDialog()
+    })
+    emitter.on('openRegisterFromHome', (routePath) => {
+      pendingRoute.value = routePath
+      openRegisterDialog()
+    })
   }
+
   window.addEventListener('showLoginDialog', handleApiLoginRequest)
 })
 
 onBeforeUnmount(() => {
-  if (emitter) {
-    emitter.off('openLoginFromFooter'); emitter.off('openLoginFromHome'); emitter.off('openRegisterFromHome')
+  if (emitter?.off) {
+    emitter.off('openLoginFromFooter')
+    emitter.off('openLoginFromHome')
+    emitter.off('openRegisterFromHome')
   }
+
   window.removeEventListener('showLoginDialog', handleApiLoginRequest)
-  stopCamera() // 组件卸载时确保释放摄像头
+  stopCamera()
 })
 </script>
-
 <style scoped>
 .header {
   background: #000000;
@@ -746,7 +939,7 @@ onBeforeUnmount(() => {
   transition: all 0.3s ease;
 }
 
-/* ==================== 极简苹果风 弹窗样式 ==================== */
+/* ==================== 鏋佺畝鑻规灉椋?寮圭獥鏍峰紡 ==================== */
 :deep(.minimal-modal-backdrop) {
   background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(4px);
@@ -796,7 +989,7 @@ onBeforeUnmount(() => {
   font-weight: 400;
 }
 
-/* 极简下划线 三 Tabs */
+/* 鏋佺畝涓嬪垝绾?涓?Tabs */
 .auth-tabs {
   display: flex;
   position: relative;
@@ -819,7 +1012,7 @@ onBeforeUnmount(() => {
   color: #1d1d1f;
 }
 
-/* 指示器平分为三等份 */
+/* 鎸囩ず鍣ㄥ钩鍒嗕负涓夌瓑浠?*/
 .tab-indicator {
   position: absolute;
   bottom: -1px;
@@ -965,7 +1158,7 @@ onBeforeUnmount(() => {
   transform: translateY(-10px);
 }
 
-/* =========== 刷脸登录专属样式 =========== */
+/* =========== 鍒疯劯鐧诲綍涓撳睘鏍峰紡 =========== */
 .face-login-panel {
   display: flex;
   flex-direction: column;
@@ -988,7 +1181,7 @@ onBeforeUnmount(() => {
   height: 100%;
   object-fit: cover;
   transform: scaleX(-1);
-  /* 镜像翻转，符合照镜子直觉 */
+  /* 闀滃儚缈昏浆锛岀鍚堢収闀滃瓙鐩磋 */
 }
 
 .scan-overlay {

@@ -4,6 +4,7 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
+import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.example.annotation.Exclude;
@@ -13,22 +14,27 @@ import org.example.constant.Result;
 import org.example.mapper.ExamMapper;
 import org.example.mapper.TaskMapper;
 import org.example.mapper.UserMapper;
+import org.example.mapper.WrongQuestionMapper;
 import org.example.pojo.base.Base;
 import org.example.pojo.base.PageVo;
 import org.example.pojo.po.Exam;
 import org.example.pojo.po.Task;
 import org.example.pojo.po.User;
+import org.example.pojo.po.WrongQuestion;
 import org.example.utils.ReqUtils;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Date;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @RestController
 @RequestMapping("/exam")
@@ -44,6 +50,10 @@ public class ExamController {
     private static final String CN_JUDGE = "\u5224\u65ad";
     private static final String CN_ESSAY = "\u7b80\u7b54";
 
+    private static final String WRONG_STATUS_PENDING_MANUAL = "pending_manual";
+    private static final String WRONG_STATUS_ACTIVE = "active";
+    private static final String WRONG_STATUS_MASTERED = "mastered";
+
     @Resource
     private ExamMapper examMapper;
 
@@ -52,6 +62,9 @@ public class ExamController {
 
     @Resource
     private UserMapper userMapper;
+
+    @Resource
+    private WrongQuestionMapper wrongQuestionMapper;
 
     @Logs("Exam Add")
     @PostMapping("/add")
@@ -91,7 +104,11 @@ public class ExamController {
         } catch (Exception ignore) {
         }
 
-        return Result.success(examMapper.insert(exam) > 0);
+        boolean saved = examMapper.insert(exam) > 0;
+        if (saved) {
+            syncWrongBookOnSubmit(exam, gradedAnswers);
+        }
+        return Result.success(saved);
     }
 
     @Logs("Exam Delete")
@@ -132,7 +149,11 @@ public class ExamController {
         dbExam.setAnswer(mergedAnswers);
         dbExam.setFinScore(hasUngradedManual ? null : finalScore);
 
-        return Result.success(examMapper.updateById(dbExam) > 0);
+        boolean saved = examMapper.updateById(dbExam) > 0;
+        if (saved) {
+            syncWrongBookOnManualReviewed(dbExam, mergedAnswers);
+        }
+        return Result.success(saved);
     }
 
     @Logs("Exam List")
@@ -468,7 +489,27 @@ public class ExamController {
         String normalized = answer.toUpperCase(Locale.ROOT)
                 .replace("\uFF0C", ",")
                 .replace("\u3001", ",")
+                .replace("\uFF1B", ",")
+                .replace(";", ",")
+                .replace("|", ",")
+                .replace("/", ",")
+                .replace("\\", ",")
                 .replace(" ", "");
+
+        // Compatible with legacy answers like "AB"/"ACD" (without comma).
+        // Also supports "A,B" / "A|B" / "A B" / "A、B" and de-duplicates options.
+        Set<String> optionSet = new LinkedHashSet<>();
+        for (int i = 0; i < normalized.length(); i++) {
+            char c = normalized.charAt(i);
+            if (c >= 'A' && c <= 'Z') {
+                optionSet.add(String.valueOf(c));
+            }
+        }
+        if (!optionSet.isEmpty()) {
+            List<String> valid = new ArrayList<>(optionSet);
+            Collections.sort(valid);
+            return String.join(",", valid);
+        }
 
         String[] parts = normalized.split(",");
         List<String> valid = new ArrayList<>();
@@ -584,6 +625,295 @@ public class ExamController {
         }
 
         return candidates;
+    }
+
+    private void syncWrongBookOnSubmit(Exam exam, List<JSONObject> gradedAnswers) {
+        Long userId = getCurrentUserIdSafe();
+        if (userId == null || gradedAnswers == null || gradedAnswers.isEmpty()) {
+            return;
+        }
+
+        for (JSONObject answer : gradedAnswers) {
+            if (answer == null) {
+                continue;
+            }
+            boolean manualRequired = getBoolDefault(answer, "manualRequired", !isObjectiveCategory(answer.getStr("category")));
+            Task task = resolveTaskByAnswerId(answer);
+            if (manualRequired) {
+                upsertManualPendingWrongQuestion(userId, exam, task, answer);
+                continue;
+            }
+
+            int score = safeInt(answer.get("score"));
+            int obtained = safeInt(answer.get("obtainedScore"));
+            if (obtained < score) {
+                upsertObjectiveWrongQuestion(userId, exam, task, answer);
+            }
+        }
+    }
+
+    private void syncWrongBookOnManualReviewed(Exam exam, List<JSONObject> mergedAnswers) {
+        Long userId = getCurrentUserIdSafe();
+        if (userId == null || mergedAnswers == null || mergedAnswers.isEmpty()) {
+            return;
+        }
+
+        for (JSONObject answer : mergedAnswers) {
+            if (answer == null) {
+                continue;
+            }
+
+            boolean manualRequired = getBoolDefault(answer, "manualRequired", !isObjectiveCategory(answer.getStr("category")));
+            if (!manualRequired || !isManualQuestionGraded(answer)) {
+                continue;
+            }
+
+            Task task = resolveTaskByAnswerId(answer);
+            int fullScore = safeInt(answer.get("score"));
+            int obtained = safeInt(answer.get("obtainedScore"));
+            if (obtained < fullScore) {
+                upsertReviewedManualWrongQuestion(userId, exam, task, answer);
+            } else {
+                handleReviewedManualCorrect(userId, exam, task, answer);
+            }
+        }
+    }
+
+    private void upsertObjectiveWrongQuestion(Long userId, Exam exam, Task task, JSONObject answer) {
+        Long questionId = parseLong(answer.get("id"));
+        if (questionId == null) {
+            return;
+        }
+
+        WrongQuestion wrongQuestion = findWrongQuestion(userId, questionId);
+        Date now = new Date();
+        if (wrongQuestion == null) {
+            wrongQuestion = new WrongQuestion();
+            wrongQuestion.setUserId(userId);
+            wrongQuestion.setQuestionId(questionId);
+            wrongQuestion.setWrongCount(1);
+            wrongQuestion.setCorrectStreak(0);
+            wrongQuestion.setStatus(WRONG_STATUS_ACTIVE);
+            wrongQuestion.setFirstWrongTime(now);
+            wrongQuestion.setLastWrongTime(now);
+        } else {
+            wrongQuestion.setWrongCount(safeInt(wrongQuestion.getWrongCount()) + 1);
+            wrongQuestion.setCorrectStreak(0);
+            wrongQuestion.setStatus(WRONG_STATUS_ACTIVE);
+            wrongQuestion.setLastWrongTime(now);
+        }
+
+        fillWrongQuestionSnapshot(wrongQuestion, exam, task, answer);
+        wrongQuestion.setLastUserAnswer(StrUtil.blankToDefault(answer.getStr("answer"), ""));
+        saveWrongQuestion(wrongQuestion);
+    }
+
+    private void upsertManualPendingWrongQuestion(Long userId, Exam exam, Task task, JSONObject answer) {
+        Long questionId = parseLong(answer.get("id"));
+        if (questionId == null) {
+            return;
+        }
+
+        WrongQuestion wrongQuestion = findWrongQuestion(userId, questionId);
+        Date now = new Date();
+        if (wrongQuestion == null) {
+            wrongQuestion = new WrongQuestion();
+            wrongQuestion.setUserId(userId);
+            wrongQuestion.setQuestionId(questionId);
+            wrongQuestion.setWrongCount(0);
+            wrongQuestion.setCorrectStreak(0);
+            wrongQuestion.setStatus(WRONG_STATUS_PENDING_MANUAL);
+            wrongQuestion.setFirstWrongTime(now);
+            wrongQuestion.setLastWrongTime(now);
+        }
+
+        fillWrongQuestionSnapshot(wrongQuestion, exam, task, answer);
+        wrongQuestion.setLastUserAnswer(StrUtil.blankToDefault(answer.getStr("answer"), ""));
+        saveWrongQuestion(wrongQuestion);
+    }
+
+    private void upsertReviewedManualWrongQuestion(Long userId, Exam exam, Task task, JSONObject answer) {
+        Long questionId = parseLong(answer.get("id"));
+        if (questionId == null) {
+            return;
+        }
+
+        WrongQuestion wrongQuestion = findWrongQuestion(userId, questionId);
+        Date now = new Date();
+        if (wrongQuestion == null) {
+            wrongQuestion = new WrongQuestion();
+            wrongQuestion.setUserId(userId);
+            wrongQuestion.setQuestionId(questionId);
+            wrongQuestion.setWrongCount(1);
+            wrongQuestion.setCorrectStreak(0);
+            wrongQuestion.setStatus(WRONG_STATUS_ACTIVE);
+            wrongQuestion.setFirstWrongTime(now);
+            wrongQuestion.setLastWrongTime(now);
+        } else {
+            int currentWrongCount = safeInt(wrongQuestion.getWrongCount());
+            if (WRONG_STATUS_PENDING_MANUAL.equals(wrongQuestion.getStatus()) && currentWrongCount <= 0) {
+                wrongQuestion.setWrongCount(1);
+            } else {
+                wrongQuestion.setWrongCount(currentWrongCount + 1);
+            }
+            wrongQuestion.setCorrectStreak(0);
+            wrongQuestion.setStatus(WRONG_STATUS_ACTIVE);
+            wrongQuestion.setLastWrongTime(now);
+        }
+
+        fillWrongQuestionSnapshot(wrongQuestion, exam, task, answer);
+        wrongQuestion.setLastUserAnswer(StrUtil.blankToDefault(answer.getStr("answer"), ""));
+        saveWrongQuestion(wrongQuestion);
+    }
+
+    private void handleReviewedManualCorrect(Long userId, Exam exam, Task task, JSONObject answer) {
+        Long questionId = parseLong(answer.get("id"));
+        if (questionId == null) {
+            return;
+        }
+
+        WrongQuestion wrongQuestion = findWrongQuestion(userId, questionId);
+        if (wrongQuestion == null) {
+            return;
+        }
+
+        int currentWrongCount = safeInt(wrongQuestion.getWrongCount());
+        if (WRONG_STATUS_PENDING_MANUAL.equals(wrongQuestion.getStatus()) && currentWrongCount <= 0 && wrongQuestion.getId() != null) {
+            wrongQuestionMapper.deleteById(wrongQuestion.getId());
+            return;
+        }
+
+        if (WRONG_STATUS_PENDING_MANUAL.equals(wrongQuestion.getStatus())) {
+            wrongQuestion.setStatus(currentWrongCount > 0 ? WRONG_STATUS_ACTIVE : WRONG_STATUS_MASTERED);
+        }
+        fillWrongQuestionSnapshot(wrongQuestion, exam, task, answer);
+        wrongQuestion.setLastUserAnswer(StrUtil.blankToDefault(answer.getStr("answer"), ""));
+        saveWrongQuestion(wrongQuestion);
+    }
+
+    private WrongQuestion findWrongQuestion(Long userId, Long questionId) {
+        if (userId == null || questionId == null) {
+            return null;
+        }
+        return wrongQuestionMapper.selectOne(new LambdaQueryWrapper<WrongQuestion>()
+                .eq(WrongQuestion::getUserId, userId)
+                .eq(WrongQuestion::getQuestionId, questionId)
+                .last("limit 1"));
+    }
+
+    private void saveWrongQuestion(WrongQuestion wrongQuestion) {
+        if (wrongQuestion == null) {
+            return;
+        }
+        if (wrongQuestion.getId() == null) {
+            wrongQuestionMapper.insert(wrongQuestion);
+        } else {
+            wrongQuestionMapper.updateById(wrongQuestion);
+        }
+    }
+
+    private void fillWrongQuestionSnapshot(WrongQuestion wrongQuestion, Exam exam, Task task, JSONObject answer) {
+        wrongQuestion.setExamId(exam == null ? null : exam.getId());
+        wrongQuestion.setPaperName(exam == null ? null : exam.getName());
+
+        String category = StrUtil.blankToDefault(answer.getStr("category"), task == null ? "" : task.getCategory());
+        wrongQuestion.setQuestion(StrUtil.blankToDefault(answer.getStr("question"), task == null ? "" : task.getQuestion()));
+        wrongQuestion.setCategory(category);
+        wrongQuestion.setScore(safeInt(answer.get("score")));
+        wrongQuestion.setCorrectAnswer(StrUtil.blankToDefault(answer.getStr("correctAnswer"), task == null ? "" : task.getAnswer()));
+
+        if (task != null) {
+            wrongQuestion.setChoice(parseChoiceList(task.getChoice()));
+            wrongQuestion.setParse(task.getParse());
+            wrongQuestion.setType(task.getType());
+            wrongQuestion.setKnowledgePoint(task.getKnowledgePoint());
+            if (wrongQuestion.getScore() == null || wrongQuestion.getScore() <= 0) {
+                wrongQuestion.setScore(task.getScore());
+            }
+        }
+    }
+
+    private List<String> parseChoiceList(String rawChoice) {
+        if (StrUtil.isBlank(rawChoice)) {
+            return new ArrayList<>();
+        }
+
+        String text = rawChoice.trim();
+        if (text.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        try {
+            JSONArray jsonArray = JSONUtil.parseArray(text);
+            List<String> answer = new ArrayList<>();
+            for (Object item : jsonArray) {
+                if (item != null) {
+                    answer.add(String.valueOf(item));
+                }
+            }
+            if (!answer.isEmpty()) {
+                return answer;
+            }
+        } catch (Exception ignore) {
+        }
+
+        return parseLegacyChoice(text);
+    }
+
+    private List<String> parseLegacyChoice(String text) {
+        String normalized = text;
+        if (normalized.startsWith("[") && normalized.endsWith("]") && normalized.length() >= 2) {
+            normalized = normalized.substring(1, normalized.length() - 1).trim();
+        }
+        if (normalized.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<String> result = new ArrayList<>();
+        String[] lines = normalized.split("\\r?\\n");
+        if (lines.length > 1) {
+            for (String line : lines) {
+                String item = line.trim();
+                if (StrUtil.isNotBlank(item)) {
+                    result.add(item);
+                }
+            }
+            return result;
+        }
+
+        Matcher matcher = Pattern.compile("(?i)[A-H][\\.\\)]\\s*").matcher(normalized);
+        List<Integer> starts = new ArrayList<>();
+        while (matcher.find()) {
+            starts.add(matcher.start());
+        }
+        if (starts.size() > 1) {
+            for (int i = 0; i < starts.size(); i++) {
+                int start = starts.get(i);
+                int end = (i + 1 < starts.size()) ? starts.get(i + 1) : normalized.length();
+                String item = normalized.substring(start, end).trim();
+                if (StrUtil.isNotBlank(item)) {
+                    result.add(item);
+                }
+            }
+            return result;
+        }
+
+        String[] parts = normalized.split("\\s*[,;]\\s*");
+        for (String part : parts) {
+            String item = part.trim();
+            if (StrUtil.isNotBlank(item)) {
+                result.add(item);
+            }
+        }
+        return result;
+    }
+
+    private Long getCurrentUserIdSafe() {
+        try {
+            return SecurityUtils.getUserId();
+        } catch (Exception ignore) {
+            return null;
+        }
     }
 
     private boolean getBoolDefault(JSONObject json, String key, boolean defaultValue) {
