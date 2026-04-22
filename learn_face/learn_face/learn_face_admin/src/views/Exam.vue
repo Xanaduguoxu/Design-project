@@ -1,9 +1,14 @@
-<template>
+﻿<template>
   <div class="exam-container">
     <div class="search-box">
       <el-form :model="searchForm" inline class="search-form">
-        <el-form-item label="关键词">
-          <el-input v-model="searchForm.keyword" placeholder="请输入关键词" clearable></el-input>
+        <el-form-item label="考试名称">
+          <el-input
+            v-model="searchForm.keyword"
+            placeholder="请输入考试名称"
+            clearable
+            @keyup.enter.native="handleSearch"
+          />
         </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="handleSearch">搜索</el-button>
@@ -13,90 +18,109 @@
     </div>
 
     <div class="table-container">
-      <el-table :data="examList" style="width: 100%" border stripe v-loading="loading">
+      <el-table :data="examList" border stripe v-loading="loading">
         <el-table-column prop="id" label="ID" width="180" align="center" />
-        <el-table-column prop="createBy" label="答题人" width="180" align="center" />
-        <el-table-column prop="name" label="试卷名称" min-width="150" />
-        <el-table-column prop="totalScore" label="总分" width="100" align="center">
+        <el-table-column prop="createBy" label="提交人" width="140" align="center" />
+        <el-table-column prop="name" label="考试名称" min-width="180" />
+        <el-table-column prop="totalScore" label="总分" width="90" align="center" />
+        <el-table-column label="最终得分" width="100" align="center">
           <template slot-scope="scope">
-            <span class="total-score-badge">{{ scope.row.totalScore }}分</span>
+            <span v-if="scope.row.finScore !== null && scope.row.finScore !== undefined">{{ scope.row.finScore }}</span>
+            <span v-else class="pending-text">待批改</span>
           </template>
         </el-table-column>
-        <el-table-column prop="finScore" label="最终得分" width="100" align="center">
+        <el-table-column label="状态" width="100" align="center">
           <template slot-scope="scope">
-            <span class="final-score-badge">{{ scope.row.finScore || 0 }}分</span>
+            <el-tag :type="getExamStatus(scope.row).type" effect="light" size="small">
+              {{ getExamStatus(scope.row).text }}
+            </el-tag>
           </template>
         </el-table-column>
-
-        <el-table-column label="操作" width="160" align="center">
+        <el-table-column label="操作" width="170" align="center">
           <template slot-scope="scope">
-            <div class="operation-buttons">
-              <el-button size="mini" type="primary" @click="handleView(scope.row)">查看</el-button>
-              <el-button size="mini" type="danger" @click="handleDelete(scope.row)">删除</el-button>
-            </div>
+            <el-button size="mini" type="primary" @click="handleView(scope.row)">阅卷</el-button>
+            <el-button size="mini" type="danger" @click="handleDelete(scope.row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
 
       <div class="pagination-container">
         <el-pagination
-          @size-change="handleSizeChange"
-          @current-change="handleCurrentChange"
+          background
+          layout="total, sizes, prev, pager, next, jumper"
           :current-page="currentPage"
           :page-sizes="[8, 16, 32, 64]"
           :page-size="pageSize"
-          layout="total, sizes, prev, pager, next, jumper"
           :total="total"
-          background
-          class="custom-pagination"
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange"
         />
       </div>
     </div>
 
-    <!-- 查看试卷详情弹窗 -->
-    <el-dialog 
-      title="试卷详情" 
-      :visible.sync="detailDialogVisible" 
-      width="80%"
-      class="detail-dialog"
+    <el-dialog
+      title="考试阅卷"
+      :visible.sync="detailDialogVisible"
+      width="86%"
       :close-on-click-modal="false"
+      class="detail-dialog"
     >
-      <div class="exam-detail-content">
-        <h3 class="exam-name">{{ currentExam.name }}</h3>
-        <p class="exam-total-score">总分: <span class="score-highlight">{{ currentExam.totalScore }}</span> 分</p>
-        <p class="exam-final-score">最终得分: <span class="score-highlight">{{ calculatedFinScore }}</span> 分</p>
-        
+      <div class="exam-detail-content" v-if="currentExam && Array.isArray(currentExam.answer)">
+        <div class="summary">
+          <div>考试名称：{{ currentExam.name }}</div>
+          <div>总分：{{ currentExam.totalScore }}</div>
+          <div>当前计算得分：{{ calculatedFinScore }}</div>
+          <div>待批改主观题：{{ pendingManualCount }}</div>
+        </div>
+
         <div class="questions-list">
-          <h4>试题列表:</h4>
-          <div 
-            v-for="(question, index) in currentExam.answer" 
-            :key="question.id" 
-            class="question-item"
-          >
-            <div class="question-header">
-              <span class="question-index">{{ index + 1 }}.</span>
-              <span class="question-category">
-                <el-tag :type="getCategoryType(question.category)">
-                  {{ question.category }}
+          <div v-for="(question, index) in currentExam.answer" :key="question.id || index" class="question-item">
+            <div class="question-top">
+              <div class="left">
+                <span class="index">{{ index + 1 }}.</span>
+                <el-tag size="small">{{ question.category || '-' }}</el-tag>
+                <el-tag size="small" :type="question.manualRequired ? 'warning' : 'success'">
+                  {{ question.manualRequired ? '主观题' : '客观题' }}
                 </el-tag>
-              </span>
+              </div>
+              <div class="right">满分 {{ question.score }} 分</div>
             </div>
-            <div class="question-content">{{ question.question }}</div>
-            <div class="question-answer">答案: <span class="answer-highlight">{{ question.answer }}</span></div>
-            <div class="question-score">得分: <span class="score-highlight">{{ question.score || 0 }}</span> 分</div>
-            <div class="question-result">
-              <span class="result-label">评判结果:</span>
-              <el-select v-model="question.result" placeholder="请选择结果">
-                <el-option label="正确" value="正确"></el-option>
-                <el-option label="错误" value="错误"></el-option>
-              </el-select>
+
+            <div class="question-content">{{ question.question || '-' }}</div>
+
+            <div class="line">
+              <span class="label">学生答案：</span>
+              <span class="value">{{ question.answer || '-' }}</span>
+            </div>
+            <div class="line">
+              <span class="label">标准答案：</span>
+              <span class="value">{{ question.correctAnswer || '-' }}</span>
+            </div>
+
+            <div v-if="!question.manualRequired" class="line">
+              <span class="label">自动得分：</span>
+              <span class="value strong">{{ question.obtainedScore || 0 }}</span>
+              <span class="muted">判定：{{ question.result || '未知' }}</span>
+            </div>
+
+            <div v-else class="manual-area">
+              <span class="label">教师评分：</span>
+              <el-input-number
+                v-model="question.teacherScore"
+                :min="0"
+                :max="question.score || 0"
+                :step="1"
+                size="small"
+              />
+              <span class="muted" v-if="question.teacherScore === null || question.teacherScore === undefined">未评分</span>
+              <span class="muted" v-else>已评分</span>
             </div>
           </div>
         </div>
       </div>
-      <span slot="footer" class="dialog-footer">
-        <el-button @click="detailDialogVisible = false">取 消</el-button>
-        <el-button type="primary" @click="submitGrading" :loading="gradingLoading">提交阅卷</el-button>
+      <span slot="footer">
+        <el-button @click="detailDialogVisible = false">关闭</el-button>
+        <el-button type="primary" :loading="gradingLoading" @click="submitGrading">提交阅卷</el-button>
       </span>
     </el-dialog>
   </div>
@@ -112,184 +136,203 @@ export default {
       total: 0,
       currentPage: 1,
       pageSize: 8,
-      searchForm: { keyword: '' },
+      searchForm: {
+        keyword: ''
+      },
       detailDialogVisible: false,
       gradingLoading: false,
-      currentExam: {}
+      currentExam: null
     }
   },
   created() {
-    this.fetchList();
+    this.fetchList()
   },
   computed: {
     calculatedFinScore() {
-      if (!this.currentExam.answer) {
-        return 0;
+      if (!this.currentExam || !Array.isArray(this.currentExam.answer)) {
+        return 0
       }
-      
-      return this.currentExam.answer.reduce((total, question) => {
-        if (question.result === '正确') {
-          return total + (question.score || 0);
+      return this.currentExam.answer.reduce((sum, q) => {
+        if (q.manualRequired) {
+          return sum + (q.teacherScore !== null && q.teacherScore !== undefined ? Number(q.teacherScore) : 0)
         }
-        return total;
-      }, 0);
+        return sum + (Number(q.obtainedScore) || 0)
+      }, 0)
+    },
+    pendingManualCount() {
+      if (!this.currentExam || !Array.isArray(this.currentExam.answer)) {
+        return 0
+      }
+      return this.currentExam.answer.filter(q => q.manualRequired && (q.teacherScore === null || q.teacherScore === undefined)).length
     }
   },
   methods: {
-    // 获取考试列表
     fetchList() {
-      this.loading = true;
+      this.loading = true
       this.$http.post('/v1/exam/list', {
         currentPage: this.currentPage,
         pageSize: this.pageSize,
         keyword: this.searchForm.keyword
-      })
-        .then(response => {
-          if (response.data.code === 200) {
-            const data = response.data.data || { total: 0, data: [] };
-            this.examList = data.data || [];
-            this.total = data.total || 0;
-          } else {
-            this.$message.error(response.data.message || '获取考试列表失败');
-          }
-        })
-        .catch(error => {
-          this.$message.error('获取考试列表失败');
-          console.error(error);
-        })
-        .finally(() => {
-          this.loading = false;
-        });
-    },
-
-    // 搜索
-    handleSearch() {
-      this.currentPage = 1;
-      this.fetchList();
-    },
-
-    // 重置
-    handleReset() {
-      this.searchForm.keyword = '';
-      this.currentPage = 1;
-      this.fetchList();
-    },
-
-    // 分页大小改变
-    handleSizeChange(size) {
-      this.pageSize = size;
-      this.currentPage = 1;
-      this.fetchList();
-    },
-
-    // 页码改变
-    handleCurrentChange(page) {
-      this.currentPage = page;
-      this.fetchList();
-    },
-
-    // 查看考试详情
-    handleView(row) {
-      // 深拷贝考试数据
-      this.currentExam = JSON.parse(JSON.stringify(row));
-      
-      // 确保每个问题都有result字段
-      this.currentExam.answer = this.currentExam.answer.map(question => {
-        return {
-          ...question,
-          result: question.result || ''
-        };
-      });
-      
-      this.detailDialogVisible = true;
-    },
-
-    // 删除考试
-    handleDelete(row) {
-      this.$confirm(`确定要删除考试「${row.name}」吗？`, '提示', {
-        confirmButtonText: '确定删除',
-        cancelButtonText: '取消',
-        type: 'warning',
-        confirmButtonClass: 'el-button--danger',
-        center: true
-      }).then(() => {
-        this.$http.delete(`/v1/exam/del?id=${row.id}`)
-          .then(response => {
-            if (response.data.code === 200) {
-              this.$message.success('删除成功');
-              // 如果删除的是当前页的最后一条数据，且不是第一页，则跳转到前一页
-              if (this.examList.length === 1 && this.currentPage > 1) {
-                this.currentPage -= 1;
-              }
-              this.fetchList();
-            } else {
-              this.$message.error(response.data.message || '删除失败');
-            }
-          })
-          .catch(error => {
-            console.error('删除考试失败:', error);
-            this.$message.error('删除失败');
-          });
+      }).then(response => {
+        if (response.data.code === 200) {
+          const page = response.data.data || {}
+          const records = Array.isArray(page.data) ? page.data : []
+          this.examList = records.map(item => this.normalizeExamRow(item))
+          this.total = page.total || 0
+        } else {
+          this.$message.error(response.data.message || '获取考试列表失败')
+        }
       }).catch(() => {
-        this.$message.info('已取消删除');
-      });
+        this.$message.error('获取考试列表失败')
+      }).finally(() => {
+        this.loading = false
+      })
     },
+    normalizeExamRow(row) {
+      const copied = JSON.parse(JSON.stringify(row || {}))
+      const answerArray = this.parseAnswerArray(copied.answer)
+      copied.answer = answerArray.map(item => this.normalizeQuestionForView(item))
+      return copied
+    },
+    parseAnswerArray(answerValue) {
+      if (Array.isArray(answerValue)) {
+        return answerValue
+      }
+      if (typeof answerValue === 'string' && answerValue.trim()) {
+        try {
+          const parsed = JSON.parse(answerValue)
+          return Array.isArray(parsed) ? parsed : []
+        } catch (e) {
+          return []
+        }
+      }
+      return []
+    },
+    handleSearch() {
+      this.currentPage = 1
+      this.fetchList()
+    },
+    handleReset() {
+      this.searchForm.keyword = ''
+      this.currentPage = 1
+      this.fetchList()
+    },
+    handleSizeChange(size) {
+      this.pageSize = size
+      this.currentPage = 1
+      this.fetchList()
+    },
+    handleCurrentChange(page) {
+      this.currentPage = page
+      this.fetchList()
+    },
+    handleView(row) {
+      this.currentExam = this.normalizeExamRow(row)
+      this.detailDialogVisible = true
+    },
+    normalizeQuestionForView(question) {
+      const score = Number(question.score) || 0
+      const manualRequired = question.manualRequired !== undefined && question.manualRequired !== null
+        ? !!question.manualRequired
+        : this.isSubjective(question.category)
 
-    // 获取题型标签类型
-    getCategoryType(category) {
-      const typeMap = {
-        '单选题': '',
-        '多选题': 'success',
-        '判断题': 'warning',
-        '简答题': 'info'
-      };
-      return typeMap[category] || '';
+      let obtainedScore = Number(question.obtainedScore)
+      if (Number.isNaN(obtainedScore)) {
+        obtainedScore = this.isCorrectResult(question.result) ? score : 0
+      }
+
+      let teacherScore = question.teacherScore
+      if (manualRequired) {
+        if (teacherScore === null || teacherScore === undefined || teacherScore === '') {
+          teacherScore = question.manualGraded === true ? obtainedScore : null
+        } else {
+          teacherScore = Number(teacherScore)
+        }
+      } else {
+        teacherScore = null
+      }
+
+      return {
+        ...question,
+        score,
+        manualRequired,
+        manualGraded: !!question.manualGraded,
+        obtainedScore,
+        teacherScore
+      }
     },
-    
-    // 提交阅卷结果
+    isCorrectResult(result) {
+      const text = String(result || '').trim().toLowerCase()
+      if (!text) return false
+      return text === '正确' || text === 'correct' || text === '对' || text.includes('正确') || text.includes('correct') || text.includes('姝ｇ')
+    },
+    isSubjective(category) {
+      const text = String(category || '').toLowerCase()
+      return text.includes('简答') || text.includes('essay') || text.includes('绠€绛')
+    },
     submitGrading() {
-      // 验证是否所有题目都有评判结果
-      const hasUngraded = this.currentExam.answer.some(question => !question.result);
-      if (hasUngraded) {
-        this.$message.warning('请为所有题目设置评判结果');
-        return;
+      if (!this.currentExam) return
+
+      const hasUngradedManual = this.currentExam.answer.some(q => q.manualRequired && (q.teacherScore === null || q.teacherScore === undefined))
+      if (hasUngradedManual) {
+        this.$message.warning('请先完成所有主观题评分再提交')
+        return
       }
-      
-      // 验证最终得分不超过总分
-      const calculatedScore = this.calculatedFinScore;
-      if (calculatedScore > this.currentExam.totalScore) {
-        this.$message.error('最终得分不能超过总分');
-        return;
-      }
-      
-      this.gradingLoading = true;
-      
-      // 准备提交数据
+
       const payload = {
         id: this.currentExam.id,
-        name: this.currentExam.name,
-        totalScore: this.currentExam.totalScore,
-        finScore: calculatedScore,
-        answer: this.currentExam.answer
-      };
-      
-      this.$http.post('/v1/exam/update', payload)
-        .then(response => {
+        answer: this.currentExam.answer.map(q => ({
+          id: q.id,
+          teacherScore: q.manualRequired ? Number(q.teacherScore) : null
+        }))
+      }
+
+      this.gradingLoading = true
+      this.$http.post('/v1/exam/update', payload).then(response => {
+        if (response.data.code === 200) {
+          this.$message.success('阅卷提交成功')
+          this.detailDialogVisible = false
+          this.fetchList()
+        } else {
+          this.$message.error(response.data.message || '阅卷提交失败')
+        }
+      }).catch(() => {
+        this.$message.error('阅卷提交失败')
+      }).finally(() => {
+        this.gradingLoading = false
+      })
+    },
+    getExamStatus(row) {
+      if (row.finScore === null || row.finScore === undefined) {
+        return { text: '待批改', type: 'warning' }
+      }
+      const total = Number(row.totalScore) || 0
+      const score = Number(row.finScore) || 0
+      const ratio = total > 0 ? score / total : 0
+      if (ratio >= 0.8) return { text: '优秀', type: 'success' }
+      if (ratio >= 0.6) return { text: '及格', type: 'primary' }
+      return { text: '不及格', type: 'danger' }
+    },
+    handleDelete(row) {
+      this.$confirm(`确认删除考试【${row.name || row.id}】吗？`, '提示', {
+        confirmButtonText: '确认',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }).then(() => {
+        this.$http.delete(`/v1/exam/del?id=${row.id}`).then(response => {
           if (response.data.code === 200) {
-            this.$message.success('阅卷提交成功');
-            this.detailDialogVisible = false;
-            this.fetchList();
+            this.$message.success('删除成功')
+            if (this.examList.length === 1 && this.currentPage > 1) {
+              this.currentPage -= 1
+            }
+            this.fetchList()
           } else {
-            this.$message.error(response.data.message || '阅卷提交失败');
+            this.$message.error(response.data.message || '删除失败')
           }
+        }).catch(() => {
+          this.$message.error('删除失败')
         })
-        .catch(error => {
-          console.error('阅卷提交失败:', error);
-          this.$message.error('阅卷提交失败');
-        })
-        .finally(() => {
-          this.gradingLoading = false;
-        });
+      }).catch(() => {})
     }
   }
 }
@@ -300,35 +343,16 @@ export default {
   padding: 20px;
 }
 
-.search-box {
-  background: #fff;
-  padding: 20px;
-  margin-bottom: 20px;
-  border-radius: 4px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-}
-
-.search-form {
-  margin: 0;
-}
-
-.search-form .el-form-item {
-  margin-bottom: 0;
-}
-
+.search-box,
 .table-container {
   background: #fff;
   padding: 20px;
-  border-radius: 4px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
 }
 
-.operation-buttons .el-button {
-  margin-right: 5px;
-}
-
-.operation-buttons .el-button:last-child {
-  margin-right: 0;
+.search-box {
+  margin-bottom: 16px;
 }
 
 .pagination-container {
@@ -336,111 +360,83 @@ export default {
   text-align: center;
 }
 
-.total-score-badge {
-  background-color: #f0f9eb;
-  color: #67c23a;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 12px;
+.pending-text {
+  color: #e6a23c;
 }
 
-.detail-dialog .el-dialog__body {
-  padding: 20px;
+.exam-detail-content {
+  max-height: 70vh;
+  overflow: auto;
 }
 
-.exam-detail-content .exam-name {
-  margin: 0 0 10px 0;
-  font-size: 18px;
-  font-weight: bold;
-  color: #303133;
-}
-
-.exam-detail-content .exam-total-score {
-  margin: 0 0 10px 0;
-  font-size: 16px;
-  color: #606266;
-}
-
-.exam-detail-content .exam-final-score {
-  margin: 0 0 20px 0;
-  font-size: 16px;
-  color: #606266;
+.summary {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  color: #606266;
 }
 
-.exam-detail-content .score-highlight {
-  color: #409EFF;
-  font-weight: bold;
-}
-
-.questions-list h4 {
-  margin: 20px 0 15px 0;
-  font-size: 16px;
-  color: #303133;
-  border-bottom: 1px solid #dcdfe6;
-  padding-bottom: 5px;
+.questions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .question-item {
-  margin-bottom: 15px;
-  padding: 10px;
   border: 1px solid #ebeef5;
-  border-radius: 4px;
-  background-color: #fafafa;
+  border-radius: 6px;
+  padding: 12px;
+  background: #fafafa;
 }
 
-.question-header {
+.question-top {
   display: flex;
+  justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
 }
 
-.question-index {
-  font-weight: bold;
-  margin-right: 10px;
-  color: #606266;
+.question-top .left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.question-category {
-  margin-left: auto;
+.index {
+  font-weight: 700;
 }
 
 .question-content {
+  line-height: 1.6;
   margin-bottom: 8px;
   color: #303133;
-  line-height: 1.5;
 }
 
-.question-answer {
-  color: #909399;
-  font-style: italic;
-}
-
-.answer-highlight {
-  color: #409EFF;
-  font-weight: bold;
-}
-
-.question-score {
-  margin-top: 5px;
-  color: #67c23a;
-  font-weight: bold;
-}
-
-.question-result {
-  margin-top: 8px;
+.line,
+.manual-area {
+  margin-top: 6px;
   display: flex;
   align-items: center;
+  gap: 8px;
+  font-size: 13px;
 }
 
-.result-label {
-  margin-right: 10px;
-  color: #606266;
-  font-size: 14px;
+.label {
+  color: #909399;
 }
 
-.question-result .el-select {
-  width: 120px;
+.value {
+  color: #303133;
+}
+
+.strong {
+  font-weight: 700;
+}
+
+.muted {
+  color: #909399;
+  font-size: 12px;
 }
 </style>
