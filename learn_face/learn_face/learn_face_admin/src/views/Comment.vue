@@ -262,7 +262,7 @@ export default {
                 center: true
             }).then(() => {
                 // 这里需要根据实际接口调整删除请求
-                this.$http.delete('/v1/comment/delete', { params: { id: row.id } })
+                this.$http.delete('/v1/comments/del', { params: { id: row.id } })
                     .then(response => {
                         if (response.data.code === 200) {
                             this.$message.success('删除成功')

@@ -70,73 +70,89 @@ public class CommentsController {
 
     @Logs("查看评论")
     @GetMapping("/allComments")
-    public Result<JSONArray> allComments(@RequestParam("id") Long id) {
-        List<Comments> allComments = commentsMapper.selectList(
-                new LambdaQueryWrapper<Comments>()
-                        .eq(Comments::getCorrelationId, id)
-                        .orderByAsc(Comments::getCreateTime)
-        );
+    public Result<JSONArray> allComments(@RequestParam("id") Long id,
+                                         @RequestParam(value = "belong", required = false) String belong) {
+        LambdaQueryWrapper<Comments> queryWrapper = new LambdaQueryWrapper<Comments>()
+                .eq(Comments::getCorrelationId, id);
+        if (StrUtil.isNotBlank(belong)) {
+            queryWrapper.eq(Comments::getBelong, belong);
+        }
+        queryWrapper.orderByAsc(Comments::getCreateTime);
 
+        List<Comments> allComments = commentsMapper.selectList(queryWrapper);
         if (CollectionUtils.isEmpty(allComments)) {
             return Result.success(new JSONArray());
         }
 
-        List<JSONObject> allList = allComments.stream()
-                .map(this::toJSONObject)
+        Map<Long, List<Comments>> childrenMap = allComments.stream()
+                .filter(item -> item.getParentId() != null)
+                .collect(Collectors.groupingBy(Comments::getParentId));
+
+        List<Comments> rootList = allComments.stream()
+                .filter(item -> item.getParentId() == null)
+                .sorted((a, b) -> compareTimeDesc(a.getCreateTime(), b.getCreateTime()))
                 .collect(Collectors.toList());
 
-        Map<Long, List<JSONObject>> childrenMap = allList.stream()
-                .filter(obj -> obj.getLong("parentId") != null)
-                .collect(Collectors.groupingBy(obj -> obj.getLong("parentId")));
-
-        List<JSONObject> rootList = allList.stream()
-                .filter(obj -> obj.getLong("parentId") == null)
-                .collect(Collectors.toList());
-
-        for (JSONObject root : rootList) {
-            attachChildren(root, childrenMap);
+        JSONArray result = new JSONArray();
+        for (Comments root : rootList) {
+            result.add(buildCommentTree(root, childrenMap));
         }
-
-        rootList.sort((a, b) -> {
-            Date t1 = a.getDate("createTime");
-            Date t2 = b.getDate("createTime");
-            if (t1 == null || t2 == null) {
-                return 0;
-            }
-            return t2.compareTo(t1);
-        });
-
-        return Result.success(new JSONArray(rootList));
+        return Result.success(result);
     }
 
-    private void attachChildren(JSONObject node, Map<Long, List<JSONObject>> childrenMap) {
-        List<JSONObject> children = childrenMap.getOrDefault(node.getLong("id"), new ArrayList<>());
-        children.sort((a, b) -> {
-            Date t1 = a.getDate("createTime");
-            Date t2 = b.getDate("createTime");
-            if (t1 == null || t2 == null) {
-                return 0;
-            }
-            return t1.compareTo(t2);
-        });
-        for (JSONObject child : children) {
-            attachChildren(child, childrenMap);
+    private JSONObject buildCommentTree(Comments node, Map<Long, List<Comments>> childrenMap) {
+        JSONObject jsonNode = toJSONObject(node);
+        List<Comments> children = childrenMap.getOrDefault(node.getId(), new ArrayList<>());
+        children.sort((a, b) -> compareTimeAsc(a.getCreateTime(), b.getCreateTime()));
+
+        JSONArray childrenArr = new JSONArray();
+        for (Comments child : children) {
+            childrenArr.add(buildCommentTree(child, childrenMap));
         }
-        node.putOpt("children", children);
-        node.putOpt("childCount", children.size());
+
+        jsonNode.putOpt("children", childrenArr);
+        jsonNode.putOpt("childCount", children.size());
+        return jsonNode;
+    }
+
+    private int compareTimeAsc(Date t1, Date t2) {
+        if (t1 == null && t2 == null) {
+            return 0;
+        }
+        if (t1 == null) {
+            return -1;
+        }
+        if (t2 == null) {
+            return 1;
+        }
+        return t1.compareTo(t2);
+    }
+
+    private int compareTimeDesc(Date t1, Date t2) {
+        if (t1 == null && t2 == null) {
+            return 0;
+        }
+        if (t1 == null) {
+            return 1;
+        }
+        if (t2 == null) {
+            return -1;
+        }
+        return t2.compareTo(t1);
     }
 
     private JSONObject toJSONObject(Comments comment) {
         JSONObject obj = new JSONObject();
-        obj.putOpt("id", comment.getId());
-        obj.putOpt("correlationId", comment.getCorrelationId());
-        obj.putOpt("parentId", comment.getParentId());
+        obj.putOpt("id", comment.getId() == null ? null : comment.getId().toString());
+        obj.putOpt("correlationId", comment.getCorrelationId() == null ? null : comment.getCorrelationId().toString());
+        obj.putOpt("parentId", comment.getParentId() == null ? null : comment.getParentId().toString());
         obj.putOpt("sender", comment.getSender());
         obj.putOpt("senderAvatar", comment.getSenderAvatar());
         obj.putOpt("receiver", comment.getReceiver());
         obj.putOpt("content", comment.getContent());
         obj.putOpt("createTime", comment.getCreateTime());
         obj.putOpt("images", comment.getImages());
+        obj.putOpt("belong", comment.getBelong());
         return obj;
     }
 }

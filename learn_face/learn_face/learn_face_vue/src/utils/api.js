@@ -322,8 +322,9 @@ export async function getRecommendedCoursesAPI() {
 }
 
 // 获取评论列表API
-export async function getCommentsAPI(workId) {
-  return apiRequest(`/comments/allComments?id=${workId}`)
+export async function getCommentsAPI(workId, belong = '') {
+  const belongParam = belong ? `&belong=${encodeURIComponent(belong)}` : ''
+  return apiRequest(`/comments/allComments?id=${workId}${belongParam}`)
 }
 
 // 获取课程列表API

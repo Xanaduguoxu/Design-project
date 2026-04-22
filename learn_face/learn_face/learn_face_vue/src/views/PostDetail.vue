@@ -239,7 +239,7 @@ export default {
     async loadComments() {
       if (!this.postId) return
       try {
-        const response = await getCommentsAPI(this.postId)
+        const response = await getCommentsAPI(this.postId, 'post')
         const commentList = Array.isArray(response) ? response : []
         this.replies = commentList.map(comment => this.normalizeRootComment(comment))
         this.replyingTo = null
@@ -281,11 +281,6 @@ export default {
         this.collectNestedReplies(child.children || [], container)
       })
       return container
-    },
-
-    getNumericId(value) {
-      const parsed = Number(value)
-      return Number.isNaN(parsed) ? value : parsed
     },
 
     resetReplyEditor() {
@@ -363,7 +358,7 @@ export default {
       try {
         const replyData = {
           correlationId: this.postId,
-          parentId: this.getNumericId(reply.id),
+          parentId: String(reply.id),
           sender: this.currentUser.name || '匿名用户',
           senderAvatar: this.currentUser.avatar || '',
           receiver: reply.userName,
