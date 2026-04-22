@@ -1,0 +1,66 @@
+spring:
+  # 文件上传
+  servlet:
+    multipart:
+      # 单个文件大小
+      max-file-size: 100MB
+      # 设置总上传的文件大小
+      max-request-size: 200MB
+  profiles:
+    active: dev
+  application:
+    name: ai_server
+  jackson:
+    # 回复时间格式化
+    date-format: yyyy-MM-dd HH:mm:ss
+    # 时差8小时
+    time-zone: GMT+8
+
+  #  邮箱类型	  SMTP服务器地址	    端口号
+  #  QQ	          smtp.qq.com	    465或587
+  #  sina	      smtp.sina.cn	    465或587
+  #  126  	      smtp.126.com	    465或994
+  #  aliyun       smtp.aliyun.com   465或994
+  #  163          smtp.163.com	    465或994
+  #  yeah         smtp.yeah.net	    465或994
+  #  smtpPwd需要去对应的邮箱申请,qq邮箱就是去设置-账户开启POP3协议,给一个授权码就是smtpPwd
+  mail:
+    host: smtp.qq.com
+    username: 1444141859@qq.com
+    password: tljxpoouoqsdbagd
+    protocol: smtp
+    properties:
+      from: 1444141859@qq.com
+      mail.smtp.ssl.enable: true
+    port: 465
+
+server:
+  servlet:
+    context-path: /v1
+
+mybatis-plus:
+  configuration:
+    #    开启驼峰命名规则,实体类nickName,mysql中为nick_name
+    map-underscore-to-camel-case: true
+    #    打印查询语句
+#    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+permit: /v1/common,/v1/auth/sendCode,/v1/auth/login,/v1/auth/register,/v1/auth/findPassword,/v1/webSocket
+
+security:
+  white-list:
+    urls:
+      - /common/**
+      - /chat/chats
+      - /auth/login
+      - /auth/register
+      - /auth/sendCode
+      - /auth/findPassword
+      - /auth/faceLogin
+      - /webSocket/**
+
+logging:
+  file:
+    name: ${user.home}/logs/ # 日志文件根路径
+
+llm_sk: "Bearer sk-795bfbc"

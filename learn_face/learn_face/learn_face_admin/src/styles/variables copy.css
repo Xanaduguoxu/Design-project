@@ -1,0 +1,94 @@
+:root {
+
+    /* 全局输入框背景颜色 */
+    --input-bg-color: #fff;
+    /* 全局输入框文字颜色 */
+    --input-text-color: fff;
+    /* 全局输入框placeholder文字颜色 */
+    --input-placeholder-color: #a3a4a7;
+
+    /* 表格头,单元格背（包含空状态）景颜色 */
+    --table-header-bg-color: #fff;
+    /* 表格头文字颜色 */
+    --table-header-text-color: #606266;
+    /* 表格边框颜色 */
+    --table-border-color: #f1ecec;
+
+    /* 分页栏文字颜色 */
+    --page-text-color: #606266;
+    /* 分页栏按钮文字颜色 */
+    --page-btn-text-color: #c7cacd;
+    /* 分页栏按钮激活文字颜色 */
+    --page-btn-active-text-color: #fff;
+    /* 分页栏按钮背景色 */
+    --page-btn-bg-color: #f4f4f5;
+    /* 分页栏下拉字体颜色 */
+    --page-dropdown-text-color: #409fff;
+    /* 分页栏下拉悬停字体颜色 */
+    --page-dropdown-text-color-hover: #409fff;
+    /* 分页栏下拉悬停背景颜色 */
+    --page-dropdown-color-hover: #f5f7fa;
+    /* 分页栏下拉框背景颜色 */
+    --page-dropdown-bg-color: #fff;
+    /* 分页栏下拉框边框颜色 */
+    --page-dropdown-border-color: #d9d9d9;
+
+
+    /* 侧边栏背景色 */
+    /* --aside-bg-color: #304156; */
+    /* 侧边栏文字颜色 */
+    --aside-text-color: #000;
+    /* 侧边栏边框颜色 */
+    /* --aside-border-color: rgba(255, 255, 255, 0.2); */
+
+    /* 头部背景色 */
+    --header-bg-color: #fff;
+    /* 头部阴影颜色 */
+    /* --header-shadow-color: rgba(0, 21, 41, 0.08); */
+    /* 头部文字颜色 */
+    --header-text-color: #666360;
+
+    /* 主内容区域背景色 */
+    --main-bg-color: #f5f5f5;
+
+    /* 菜单激活背景色 */
+    /* --menu-active-bg-color: rgba(64, 158, 255, 0.05); */
+    /* 菜单激活文字颜色 */
+    --menu-active-color: #409EFF;
+    /* 菜单激活条颜色 */
+    /* --menu-active-bar-color: #409EFF; */
+    /* 菜单激活光效颜色 */
+    /* --menu-active-glow-color: rgba(64, 158, 255, 0.08); */
+
+    /* 菜单悬停背景色 */
+    /* --menu-hover-bg-color: rgba(255, 255, 255, 0.03); */
+    /* 菜单悬停条颜色 */
+    /* --menu-hover-bar-color: rgba(255, 255, 255, 0.5); */
+
+    /* 侧边渐变背景 */
+    --aside-gradient-start: #fff;
+    --aside-gradient-end: #fff;
+
+    /* 头部渐变背景 */
+    --header-gradient-start: #fff;
+    --header-gradient-end: #fff;
+
+    /* 菜单悬停项背景 */
+    --menu-item-hover: rgba(59, 130, 246, 0.1);
+    /* 菜单激活项渐变背景 */
+    --menu-active-gradient: linear-gradient(90deg, rgba(59, 130, 246, 0.15) 0%, transparent 100%);
+    /* 菜单图标滤镜 */
+    --menu-icon-filter: brightness(0) invert(0%);
+    /* 菜单图标滤镜激活 */
+    --menu-icon-filter-active: brightness(0) saturate(100%) invert(53%) sepia(96%) saturate(934%) hue-rotate(181deg) brightness(101%) contrast(92%);
+
+    /* 侧边栏阴影 */
+    --aside-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+    /* 头部阴影 */
+    --header-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+
+    /* 边框浅色 */
+    --border-light: rgba(255, 255, 255, 0.1);
+    /* 边框圆角 */
+    --border-radius: 12px;
+}
