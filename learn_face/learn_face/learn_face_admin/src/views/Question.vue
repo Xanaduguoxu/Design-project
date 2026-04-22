@@ -35,14 +35,14 @@
             </el-tag>
           </template>
         </el-table-column>
-        <!-- 新增type字段列 -->
-        <el-table-column prop="type" label="类型" width="120" align="center">
+        <el-table-column prop="type" label="难度标签" width="120" align="center">
           <template slot-scope="scope">
             <el-tag :type="getTypeTagType(scope.row.type)" size="small" effect="plain">
-              {{ scope.row.type || '未分类' }}
+              {{ scope.row.type || '未设置' }}
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="knowledgePoint" label="知识点标签" min-width="130" align="center" show-overflow-tooltip />
         <el-table-column prop="choice" label="选项" min-width="300" align="center">
           <template slot-scope="scope">
             <div v-if="scope.row.category === '单选题' || scope.row.category === '多选题'" class="choice-container">
@@ -135,17 +135,19 @@
                 </el-select>
               </el-form-item>
             </el-col>
-            <!-- 新增type字段选择 -->
             <el-col :span="12">
-              <el-form-item label="类型" prop="type">
-                <el-select v-model="form.type" placeholder="请选择类型" style="width: 100%;">
+              <el-form-item label="难度标签" prop="type">
+                <el-select v-model="form.type" placeholder="请选择难度标签" style="width: 100%;">
                   <el-option label="简单" value="简单" />
+                  <el-option label="中等" value="中等" />
                   <el-option label="困难" value="困难" />
-                  <el-option label="知识点" value="知识点" />
                 </el-select>
               </el-form-item>
             </el-col>
           </el-row>
+          <el-form-item label="知识点标签" prop="knowledgePoint">
+            <el-input v-model="form.knowledgePoint" placeholder="请输入知识点标签"></el-input>
+          </el-form-item>
           <el-form-item label="选项" prop="choice" v-if="form.category === '单选题' || form.category === '多选题'">
             <div class="choice-input-container">
               <div v-for="(item, index) in form.choice" :key="index" class="choice-input-item">
@@ -198,13 +200,15 @@ export default {
         answer: '',
         parse: '',
         category: '单选题',
-        type: '', // 新增type字段
+        type: '',
+        knowledgePoint: '',
         score: 5
       },
       rules: {
         question: [{ required: true, message: '请输入题目内容', trigger: 'blur' }],
         category: [{ required: true, message: '请选择题型', trigger: 'change' }],
-        type: [{ required: true, message: '请选择类型', trigger: 'change' }], // 新增校验规则
+        type: [{ required: true, message: '请选择难度标签', trigger: 'change' }],
+        knowledgePoint: [{ required: true, message: '请输入知识点标签', trigger: 'blur' }],
         answer: [{ required: true, message: '请输入正确答案', trigger: 'blur' }],
         score: [{ required: true, message: '请输入分值', trigger: 'blur' }]
       },
@@ -262,7 +266,8 @@ export default {
         answer: row.answer,
         parse: row.parse || '',
         category: row.category,
-        type: row.type || '', // 编辑时赋值
+        type: row.type || '',
+        knowledgePoint: row.knowledgePoint || '',
         score: row.score || 5
       }
       this.dialogVisible = true
@@ -304,7 +309,8 @@ export default {
         answer: '',
         parse: '',
         category: '单选题',
-        type: '', // 重置时清空
+        type: '',
+        knowledgePoint: '',
         score: 5
       }
     },
@@ -317,12 +323,11 @@ export default {
       }
       return typeMap[category] || ''
     },
-    // 新增type字段对应的Tag颜色
     getTypeTagType(type) {
       const typeMap = {
         '简单': 'success',
-        '困难': 'danger',
-        '知识点': 'primary'
+        '中等': 'warning',
+        '困难': 'danger'
       }
       return typeMap[type] || 'info'
     },
@@ -382,7 +387,8 @@ export default {
             answer: aiData.answer || '',
             parse: aiData.parse || '',
             category: aiData.category || '单选题',
-            type: aiData.type || '', // AI生成数据也包含type
+            type: aiData.type || '',
+            knowledgePoint: aiData.knowledgePoint || '',
             score: aiData.score || 5
           }
           this.dialogVisible = true

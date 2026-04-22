@@ -42,6 +42,14 @@ public class GoalController {
     @Logs("删除目标")
     @DeleteMapping("/del")
     public Result<Boolean> del(@RequestParam("id") Long id) {
+        Goal goal = goalMapper.selectById(id);
+        if (goal == null) {
+            return Result.fail(false);
+        }
+        String role = SecurityUtils.getRole();
+        if (!"root".equals(role) && !Objects.equals(goal.getCreateBy(), SecurityUtils.getUsername())) {
+            return Result.fail(false);
+        }
         return Result.success(goalMapper.deleteById(id) > 0);
     }
 

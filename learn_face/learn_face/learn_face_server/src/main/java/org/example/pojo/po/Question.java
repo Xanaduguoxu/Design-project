@@ -32,4 +32,6 @@ public class Question extends Base {
     private Integer score;
 
     private String type;
+
+    private String knowledgePoint;
 }

@@ -29,4 +29,6 @@ public class Task extends Base {
     private Integer score;
 
     private Integer totalScore;
+
+    private String knowledgePoint;
 }

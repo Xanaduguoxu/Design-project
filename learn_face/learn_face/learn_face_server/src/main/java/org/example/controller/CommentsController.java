@@ -45,7 +45,7 @@ public class CommentsController {
         return Result.success(commentsMapper.deleteById(id) > 0);
     }
 
-    @Logs("评论")
+    @Logs("评论分页")
     @Exclude(type = "page")
     @PostMapping("/list")
     public Result<PageVo> list(@RequestBody JSONObject req) {
@@ -71,8 +71,6 @@ public class CommentsController {
     @Logs("查看评论")
     @GetMapping("/allComments")
     public Result<JSONArray> allComments(@RequestParam("id") Long id) {
-
-
         List<Comments> allComments = commentsMapper.selectList(
                 new LambdaQueryWrapper<Comments>()
                         .eq(Comments::getCorrelationId, id)
@@ -83,37 +81,49 @@ public class CommentsController {
             return Result.success(new JSONArray());
         }
 
-        // 转换为JSONObject列表
         List<JSONObject> allList = allComments.stream()
                 .map(this::toJSONObject)
                 .collect(Collectors.toList());
 
-        // 一级评论
-        List<JSONObject> rootList = allList.stream()
-                .filter(obj -> obj.getLong("parentId") == null)
-                .collect(Collectors.toList());
-
-        //  二级评论
         Map<Long, List<JSONObject>> childrenMap = allList.stream()
                 .filter(obj -> obj.getLong("parentId") != null)
                 .collect(Collectors.groupingBy(obj -> obj.getLong("parentId")));
 
-        // 组装树形结构
+        List<JSONObject> rootList = allList.stream()
+                .filter(obj -> obj.getLong("parentId") == null)
+                .collect(Collectors.toList());
+
         for (JSONObject root : rootList) {
-            List<JSONObject> children = childrenMap.getOrDefault(root.getLong("id"), new ArrayList<>());
-            root.putOpt("children", children);
-            root.putOpt("childCount", children.size());
+            attachChildren(root, childrenMap);
         }
 
-        // 一级评论按时间倒序
         rootList.sort((a, b) -> {
             Date t1 = a.getDate("createTime");
             Date t2 = b.getDate("createTime");
+            if (t1 == null || t2 == null) {
+                return 0;
+            }
             return t2.compareTo(t1);
         });
 
-
         return Result.success(new JSONArray(rootList));
+    }
+
+    private void attachChildren(JSONObject node, Map<Long, List<JSONObject>> childrenMap) {
+        List<JSONObject> children = childrenMap.getOrDefault(node.getLong("id"), new ArrayList<>());
+        children.sort((a, b) -> {
+            Date t1 = a.getDate("createTime");
+            Date t2 = b.getDate("createTime");
+            if (t1 == null || t2 == null) {
+                return 0;
+            }
+            return t1.compareTo(t2);
+        });
+        for (JSONObject child : children) {
+            attachChildren(child, childrenMap);
+        }
+        node.putOpt("children", children);
+        node.putOpt("childCount", children.size());
     }
 
     private JSONObject toJSONObject(Comments comment) {
@@ -129,5 +139,4 @@ public class CommentsController {
         obj.putOpt("images", comment.getImages());
         return obj;
     }
-
 }

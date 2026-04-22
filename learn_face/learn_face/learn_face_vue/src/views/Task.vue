@@ -260,10 +260,50 @@ export default {
     
     // 获取选项数组
     getChoiceOptions(question) {
-      if (question.choice && Array.isArray(question.choice) && question.choice.length > 0) {
-        return question.choice
+      return this.parseChoice(question.choice)
+    },
+
+    parseChoice(rawChoice) {
+      if (Array.isArray(rawChoice)) {
+        return rawChoice
       }
-      return []
+      if (typeof rawChoice !== 'string') {
+        return []
+      }
+      const text = rawChoice.trim()
+      if (!text) {
+        return []
+      }
+      try {
+        const parsed = JSON.parse(text)
+        return Array.isArray(parsed) ? parsed : []
+      } catch (e) {
+        return this.parseLegacyChoiceText(text)
+      }
+    },
+    parseLegacyChoiceText(text) {
+      let normalized = text
+      if (normalized.startsWith('[') && normalized.endsWith(']')) {
+        normalized = normalized.slice(1, -1).trim()
+      }
+      if (!normalized) {
+        return []
+      }
+
+      const lines = normalized.split(/\r?\n/).map(item => item.trim()).filter(Boolean)
+      if (lines.length > 1) {
+        return lines
+      }
+
+      const byLabel = normalized
+        .split(/(?=[A-H][\.\)]\s*)/i)
+        .map(item => item.replace(/^[,;\s]+/, '').trim())
+        .filter(Boolean)
+      if (byLabel.length > 1) {
+        return byLabel
+      }
+
+      return normalized.split(/\s*[,;]\s*/).map(item => item.trim()).filter(Boolean)
     },
     
     // 获取选项字母前缀
@@ -380,10 +420,12 @@ export default {
         
         // 处理选项（如果是选择题）
         if (processedQuestion.category === '单选题' || processedQuestion.category === '多选题') {
-          if (question.choice && Array.isArray(question.choice)) {
-            processedQuestion.choice = question.choice
-          } else if (question.options && Array.isArray(question.options)) {
-            processedQuestion.choice = question.options
+          const parsedChoices = this.parseChoice(question.choice)
+          const parsedOptions = this.parseChoice(question.options)
+          if (parsedChoices.length > 0) {
+            processedQuestion.choice = parsedChoices
+          } else if (parsedOptions.length > 0) {
+            processedQuestion.choice = parsedOptions
           } else {
             // 如果没有选项，提供默认选项（用于调试）
             processedQuestion.choice = ['选项A', '选项B', '选项C', '选项D']

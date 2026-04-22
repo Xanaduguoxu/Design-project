@@ -456,7 +456,7 @@ export async function updateGoalStatusAPI(goalId, status) {
 
 // 删除目标API
 export async function deleteGoalAPI(goalId) {
-  return apiRequest(`/goal/del/${goalId}`, {
+  return apiRequest(`/goal/del?id=${goalId}`, {
     method: 'DELETE'
   })
 }
@@ -513,4 +513,3 @@ export async function getTaskNamesAPI() {
 export async function selectTaskAPI(name) {
   return apiRequest(`/task/selectTask?name=${name}`)
 }
-

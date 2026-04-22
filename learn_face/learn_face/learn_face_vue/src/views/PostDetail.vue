@@ -240,25 +240,57 @@ export default {
       if (!this.postId) return
       try {
         const response = await getCommentsAPI(this.postId)
-        this.replies = response.map(comment => ({
-          id: comment.id,
-          userName: comment.sender,
-          userAvatar: comment.senderAvatar,
-          content: comment.content,
-          time: this.formatTime(comment.createTime),
-          likes: comment.likes || 0,
-          replies: comment.children ? comment.children.map(reply => ({
-            id: reply.id,
-            userName: reply.sender,
-            userAvatar: reply.senderAvatar,
-            replyTo: reply.receiver,
-            content: reply.content,
-            time: this.formatTime(reply.createTime)
-          })) : []
-        }))
+        const commentList = Array.isArray(response) ? response : []
+        this.replies = commentList.map(comment => this.normalizeRootComment(comment))
+        this.replyingTo = null
       } catch (error) {
         console.error('获取评论列表失败:', error)
       }
+    },
+
+    normalizeRootComment(comment) {
+      const nestedReplies = this.collectNestedReplies(comment.children || [])
+      return {
+        id: String(comment.id),
+        userName: comment.sender,
+        userAvatar: comment.senderAvatar,
+        content: comment.content,
+        time: this.formatTime(comment.createTime),
+        likes: comment.likes || 0,
+        replies: nestedReplies
+      }
+    },
+
+    normalizeNestedReply(reply) {
+      return {
+        id: String(reply.id),
+        userName: reply.sender,
+        userAvatar: reply.senderAvatar,
+        replyTo: reply.receiver || '',
+        content: reply.content,
+        time: this.formatTime(reply.createTime)
+      }
+    },
+
+    collectNestedReplies(children, container = []) {
+      if (!Array.isArray(children) || children.length === 0) {
+        return container
+      }
+      children.forEach(child => {
+        container.push(this.normalizeNestedReply(child))
+        this.collectNestedReplies(child.children || [], container)
+      })
+      return container
+    },
+
+    getNumericId(value) {
+      const parsed = Number(value)
+      return Number.isNaN(parsed) ? value : parsed
+    },
+
+    resetReplyEditor() {
+      this.replyingTo = null
+      this.nestedReplyContent = ''
     },
 
     formatTime(timeString) {
@@ -301,7 +333,9 @@ export default {
             likes: 0,
             replies: []
           }
-          this.replies.unshift(comment)
+          void comment
+          await this.loadComments()
+          this.resetReplyEditor()
           this.replyContent = ''
           ElMessage.success('评论发表成功')
         } else {
@@ -316,7 +350,7 @@ export default {
     },
 
     showReplyToReply(reply) {
-      this.replyingTo = reply.id
+      this.replyingTo = String(reply.id)
       this.nestedReplyContent = ''
     },
 
@@ -329,7 +363,7 @@ export default {
       try {
         const replyData = {
           correlationId: this.postId,
-          parentId: reply.id,
+          parentId: this.getNumericId(reply.id),
           sender: this.currentUser.name || '匿名用户',
           senderAvatar: this.currentUser.avatar || '',
           receiver: reply.userName,
@@ -350,11 +384,10 @@ export default {
             content: this.nestedReplyContent,
             time: '刚刚'
           }
-
-          reply.replies.push(newReply)
+          void newReply
+          await this.loadComments()
           ElMessage.success('回复成功')
-          this.replyingTo = null
-          this.nestedReplyContent = ''
+          this.resetReplyEditor()
         }
       } catch (error) {
         console.error('发表回复失败:', error)
