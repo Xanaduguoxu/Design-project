@@ -53,8 +53,6 @@ public class ExamController {
     private static final String WRONG_STATUS_PENDING_MANUAL = "pending_manual";
     private static final String WRONG_STATUS_ACTIVE = "active";
     private static final String WRONG_STATUS_MASTERED = "mastered";
-    private static final String PAPER_SOURCE_STUDENT = "student";
-    private static final String GRADING_MODE_SELF = "self";
 
     @Resource
     private ExamMapper examMapper;
@@ -238,10 +236,7 @@ public class ExamController {
         graded.putOpt("correctAnswer", correctAnswer);
 
         boolean objectiveQuestion = isObjectiveCategory(category);
-        boolean selfGrading = isSelfGradingTask(task);
-        graded.putOpt("manualRequired", !objectiveQuestion && !selfGrading);
-        graded.putOpt("paperSource", task == null ? null : task.getPaperSource());
-        graded.putOpt("gradingMode", task == null ? null : task.getGradingMode());
+        graded.putOpt("manualRequired", !objectiveQuestion);
 
         if (objectiveQuestion) {
             boolean correct = isCorrectAnswer(category, userAnswer, correctAnswer);
@@ -250,15 +245,6 @@ public class ExamController {
             graded.putOpt("autoGraded", true);
             graded.putOpt("manualGraded", true);
             graded.putOpt("teacherScore", null);
-        } else if (selfGrading) {
-            Integer selfScore = resolveSelfScore(submittedAnswer, score);
-            int finalScore = selfScore == null ? 0 : selfScore;
-            graded.putOpt("result", resolveSubjectiveResult(finalScore, score));
-            graded.putOpt("obtainedScore", finalScore);
-            graded.putOpt("autoGraded", false);
-            graded.putOpt("manualGraded", true);
-            graded.putOpt("teacherScore", null);
-            graded.putOpt("selfScore", finalScore);
         } else {
             graded.putOpt("result", RESULT_PENDING);
             graded.putOpt("obtainedScore", 0);
@@ -411,38 +397,6 @@ public class ExamController {
 
         int max = Math.max(fullScore, 0);
         return Math.max(0, Math.min(max, parsed));
-    }
-
-    private Integer resolveSelfScore(JSONObject answer, int fullScore) {
-        if (answer == null) {
-            return null;
-        }
-        Object scoreValue = answer.get("selfScore");
-        if (scoreValue == null) {
-            scoreValue = answer.get("manualScore");
-        }
-        if (scoreValue == null) {
-            scoreValue = answer.get("obtainedScore");
-        }
-
-        Integer parsed = parseNullableInt(scoreValue);
-        if (parsed == null) {
-            return null;
-        }
-        int max = Math.max(fullScore, 0);
-        return Math.max(0, Math.min(max, parsed));
-    }
-
-    private boolean isSelfGradingTask(Task task) {
-        if (task == null) {
-            return false;
-        }
-        String mode = StrUtil.blankToDefault(task.getGradingMode(), "").trim().toLowerCase(Locale.ROOT);
-        if (GRADING_MODE_SELF.equals(mode)) {
-            return true;
-        }
-        String source = StrUtil.blankToDefault(task.getPaperSource(), "").trim().toLowerCase(Locale.ROOT);
-        return PAPER_SOURCE_STUDENT.equals(source);
     }
 
     private String resolveSubjectiveResult(int score, int fullScore) {

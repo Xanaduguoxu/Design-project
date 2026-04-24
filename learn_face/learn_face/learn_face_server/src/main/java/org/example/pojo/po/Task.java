@@ -31,19 +31,4 @@ public class Task extends Base {
     private Integer totalScore;
 
     private String knowledgePoint;
-
-    /**
-     * teacher | student
-     */
-    private String paperSource;
-
-    /**
-     * student paper owner
-     */
-    private Long ownerUserId;
-
-    /**
-     * teacher | self
-     */
-    private String gradingMode;
 }

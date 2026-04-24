@@ -48,9 +48,6 @@ public class WrongQuestionController {
     private static final String DIFF_EASY = "easy";
     private static final String DIFF_MEDIUM = "medium";
     private static final String DIFF_HARD = "hard";
-    private static final String PAPER_SOURCE_TEACHER = "teacher";
-    private static final String PAPER_SOURCE_STUDENT = "student";
-    private static final String GRADING_MODE_SELF = "self";
     private static final DateTimeFormatter PAPER_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
     @Resource
@@ -323,7 +320,6 @@ public class WrongQuestionController {
 
         List<Task> allTasks = taskMapper.selectList(new LambdaQueryWrapper<Task>()
                 .isNotNull(Task::getQuestion)
-                .and(wrapper -> wrapper.eq(Task::getPaperSource, PAPER_SOURCE_TEACHER).or().isNull(Task::getPaperSource))
                 .orderByDesc(Task::getCreateTime));
         if (allTasks.isEmpty()) {
             resp.putOpt("success", false);
@@ -365,9 +361,6 @@ public class WrongQuestionController {
             newTask.setId(null);
             newTask.setName(paperName);
             newTask.setTotalScore(totalScore);
-            newTask.setPaperSource(PAPER_SOURCE_STUDENT);
-            newTask.setOwnerUserId(userId);
-            newTask.setGradingMode(GRADING_MODE_SELF);
             taskMapper.insert(newTask);
         }
 

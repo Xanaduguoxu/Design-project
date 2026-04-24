@@ -1,33 +1,9 @@
-﻿<template>
+<template>
   <div class="exam-container">
     <!-- 试卷选择页面 -->
     <div v-if="showExamSelect && !examStarted" class="exam-select-page">
       <div class="select-container">
         <h2 class="select-title">选择考试试卷</h2>
-        <div class="paper-source-switch">
-          <button
-            class="source-btn"
-            :class="{ active: paperSource === 'teacher' }"
-            @click="changePaperSource('teacher')"
-          >
-            老师卷
-          </button>
-          <button
-            class="source-btn"
-            :class="{ active: paperSource === 'student' }"
-            @click="changePaperSource('student')"
-          >
-            我的卷
-          </button>
-          <button
-            v-if="paperSource === 'student'"
-            class="source-btn danger"
-            :disabled="!selectedExamName"
-            @click="deleteSelectedStudentPaper"
-          >
-            删除我的卷
-          </button>
-        </div>
         <div class="exam-list">
           <div 
             v-for="examName in examNames" 
@@ -153,16 +129,6 @@
               placeholder="请输入您的答案..."
               rows="6"
             ></textarea>
-            <div v-if="isSelfReviewQuestion(question)" class="self-score-row">
-              <span>自评得分：</span>
-              <input
-                v-model.number="question.selfScore"
-                class="self-score-input"
-                type="number"
-                min="0"
-                :max="Number(question.score) || 0"
-              >
-            </div>
           </div>
 
           <!-- 其他类型（默认显示简答题） -->
@@ -173,16 +139,6 @@
               placeholder="请输入您的答案..."
               rows="6"
             ></textarea>
-            <div v-if="isSelfReviewQuestion(question)" class="self-score-row">
-              <span>自评得分：</span>
-              <input
-                v-model.number="question.selfScore"
-                class="self-score-input"
-                type="number"
-                min="0"
-                :max="Number(question.score) || 0"
-              >
-            </div>
           </div>
 
           <!-- 导航按钮 -->
@@ -227,7 +183,7 @@
 </template>
 
 <script>
-import { deleteMyPaperAPI, getTaskAPI, submitExamAPI, getTaskNamesAPI, selectTaskAPI } from '@/utils/api.js'
+import { getTaskAPI, submitExamAPI, getTaskNamesAPI, selectTaskAPI } from '@/utils/api.js'
 import { ElMessage } from 'element-plus'
 
 export default {
@@ -248,7 +204,6 @@ export default {
       timerInterval: null,
       currentExamName: '',
       routeExamLoaded: '',
-      paperSource: 'teacher'
     }
   },
   computed: {
@@ -257,17 +212,11 @@ export default {
     }
   },
   async mounted() {
-    this.paperSource = this.resolvePaperSourceFromRoute()
     await this.fetchExamNames()
     await this.tryLoadExamFromRoute()
   },
   watch: {
     '$route.query.examName': {
-      handler() {
-        this.tryLoadExamFromRoute()
-      }
-    },
-    '$route.query.paperSource': {
       handler() {
         this.tryLoadExamFromRoute()
       }
@@ -277,7 +226,7 @@ export default {
     // 获取试卷列表
     async fetchExamNames() {
       try {
-        const response = await getTaskNamesAPI({ paperSource: this.paperSource })
+        const response = await getTaskNamesAPI()
         console.log('试卷列表接口返回:', response)
         
         let list = []
@@ -295,56 +244,11 @@ export default {
         } else {
           console.warn('未获取到试卷列表')
           this.examNames = []
-          ElMessage.warning(this.paperSource === 'student' ? '你还没有自组卷' : '未获取到可用试卷')
+          ElMessage.warning('未获取到可用试卷')
         }
       } catch (error) {
         console.error('获取试卷列表失败:', error)
         ElMessage.error('获取试卷列表失败，请刷新重试')
-      }
-    },
-
-    resolvePaperSourceFromRoute() {
-      const source = this.$route?.query?.paperSource
-      return source === 'student' ? 'student' : 'teacher'
-    },
-
-    async changePaperSource(nextSource) {
-      const source = nextSource === 'student' ? 'student' : 'teacher'
-      if (source === this.paperSource) {
-        return
-      }
-      this.paperSource = source
-      this.selectedExamName = ''
-      this.routeExamLoaded = ''
-      await this.fetchExamNames()
-    },
-
-    async deleteSelectedStudentPaper() {
-      if (this.paperSource !== 'student') {
-        return
-      }
-      if (!this.selectedExamName) {
-        ElMessage.warning('请先选择要删除的试卷')
-        return
-      }
-
-      const confirmed = confirm(`确定删除试卷【${this.selectedExamName}】吗？`)
-      if (!confirmed) {
-        return
-      }
-
-      try {
-        const res = await deleteMyPaperAPI(this.selectedExamName)
-        if (res) {
-          ElMessage.success('删除成功')
-          this.selectedExamName = ''
-          this.routeExamLoaded = ''
-          await this.fetchExamNames()
-        } else {
-          ElMessage.error('删除失败')
-        }
-      } catch (error) {
-        ElMessage.error('删除失败')
       }
     },
     
@@ -355,23 +259,16 @@ export default {
       if (!examName) {
         return
       }
-      const routeSource = this.resolvePaperSourceFromRoute()
-      if (routeSource !== this.paperSource) {
-        this.paperSource = routeSource
-        await this.fetchExamNames()
-      }
-
-      const routeKey = `${routeSource}:${examName}`
-      if (this.routeExamLoaded === routeKey && this.questions.length > 0) {
+      if (this.routeExamLoaded === examName && this.questions.length > 0) {
         return
       }
 
       this.selectedExamName = examName
       try {
-        await this.fetchExamDataByName(examName, routeSource)
+        await this.fetchExamDataByName(examName)
         this.showExamSelect = false
         this.showConfirmDialog = true
-        this.routeExamLoaded = routeKey
+        this.routeExamLoaded = examName
       } catch (error) {
         this.routeExamLoaded = ''
         ElMessage.error(`自动加载试卷失败: ${examName}`)
@@ -438,22 +335,6 @@ export default {
 
       return normalized.split(/\s*[,;]\s*/).map(item => item.trim()).filter(Boolean)
     },
-
-    isObjectiveQuestion(question) {
-      if (!question) return false
-      const raw = String(question.category || '').toLowerCase()
-      if (raw.includes('single') || raw.includes('multiple') || raw.includes('judge')) {
-        return true
-      }
-      if (Array.isArray(question.choice) && question.choice.length > 0) {
-        return true
-      }
-      return false
-    },
-
-    isSelfReviewQuestion(question) {
-      return !!question && question.gradingMode === 'self' && !this.isObjectiveQuestion(question)
-    },
     
     // 获取选项字母前缀
     getOptionLetter(index) {
@@ -463,14 +344,13 @@ export default {
     // 选择试卷
     selectExam(examName) {
       this.selectedExamName = examName
-      this.routeExamLoaded = ''
     },
     
     // 开始随机试卷
     async startRandomExam() {
       try {
         ElMessage.info('正在获取随机试卷...')
-        await this.fetchRandomExamData(this.paperSource)
+        await this.fetchRandomExamData()
         this.showExamSelect = false
         this.showConfirmDialog = true
       } catch (error) {
@@ -488,7 +368,7 @@ export default {
       
       try {
         ElMessage.info(`正在加载试卷：${this.selectedExamName}...`)
-        await this.fetchExamDataByName(this.selectedExamName, this.paperSource)
+        await this.fetchExamDataByName(this.selectedExamName)
         this.showExamSelect = false
         this.showConfirmDialog = true
       } catch (error) {
@@ -498,9 +378,9 @@ export default {
     },
     
     // 获取随机试卷数据
-    async fetchRandomExamData(paperSource = this.paperSource) {
+    async fetchRandomExamData() {
       try {
-        const response = await getTaskAPI({ paperSource })
+        const response = await getTaskAPI()
         console.log('随机试卷接口返回:', response)
         
         let list = []
@@ -512,7 +392,6 @@ export default {
         
         if (list && list.length > 0) {
           this.processQuestionData(list)
-          this.paperSource = paperSource
           this.currentExamName = this.questions[0]?.examName || '随机考试'
           console.log('随机试题数据处理完成:', this.questions)
         } else {
@@ -527,9 +406,9 @@ export default {
     },
     
     // 根据试卷名称获取试题
-    async fetchExamDataByName(examName, paperSource = this.paperSource) {
+    async fetchExamDataByName(examName) {
       try {
-        const response = await selectTaskAPI(examName, { paperSource })
+        const response = await selectTaskAPI(examName)
         console.log('指定试卷接口返回:', response)
         
         let list = []
@@ -543,7 +422,6 @@ export default {
         
         if (list && list.length > 0) {
           this.processQuestionData(list)
-          this.paperSource = paperSource
           this.currentExamName = examName
           console.log('指定试题数据处理完成:', this.questions)
         } else {
@@ -567,10 +445,7 @@ export default {
           category: this.normalizeCategory(question.category),
           score: question.score || 2,
           userAnswer: '',
-          choice: [],
-          gradingMode: question.gradingMode || '',
-          paperSource: question.paperSource || this.paperSource,
-          selfScore: Number(question.selfScore ?? question.score ?? 0)
+          choice: []
         }
         
         // 处理选项（如果是选择题）
@@ -747,21 +622,13 @@ export default {
               userAnswer = question.userAnswer || '';
             }
             
-            const answerPayload = {
+            examData.answer.push({
               id: question.id,
               question: question.question,
               category: question.category,
               answer: userAnswer,
               score: question.score || 0
-            }
-            if (this.isSelfReviewQuestion(question)) {
-              const maxScore = Number(question.score) || 0
-              const selfScore = Number(question.selfScore)
-              answerPayload.selfScore = Number.isFinite(selfScore)
-                ? Math.max(0, Math.min(maxScore, selfScore))
-                : 0
-            }
-            examData.answer.push(answerPayload)
+            });
           }
           
           console.log('提交的考试数据:', examData);
@@ -854,38 +721,6 @@ export default {
   margin: 0 0 30px 0;
   font-size: 1.8rem;
   font-weight: 500;
-}
-
-.paper-source-switch {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 18px;
-}
-
-.source-btn {
-  border: 1px solid #dcdfe6;
-  background: #fff;
-  color: #606266;
-  border-radius: 8px;
-  padding: 8px 14px;
-  cursor: pointer;
-}
-
-.source-btn.active {
-  border-color: #409eff;
-  color: #409eff;
-  background: #ecf5ff;
-}
-
-.source-btn.danger {
-  border-color: #f56c6c;
-  color: #f56c6c;
-}
-
-.source-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .exam-list {
@@ -1241,21 +1076,6 @@ export default {
   outline: none;
   border-color: #3498db;
   box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
-}
-
-.self-score-row {
-  margin-top: 10px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: #606266;
-}
-
-.self-score-input {
-  width: 120px;
-  border: 1px solid #dcdfe6;
-  border-radius: 6px;
-  padding: 6px 8px;
 }
 
 .question-navigation {

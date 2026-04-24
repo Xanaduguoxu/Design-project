@@ -205,13 +205,7 @@ const generatePaper = async () => {
 
 const goToExam = () => {
   if (!generateResult.value?.paperName) return
-  router.push({
-    path: '/task',
-    query: {
-      examName: generateResult.value.paperName,
-      paperSource: 'student'
-    }
-  })
+  router.push({ path: '/task', query: { examName: generateResult.value.paperName } })
 }
 
 const copyPaperName = async () => {
