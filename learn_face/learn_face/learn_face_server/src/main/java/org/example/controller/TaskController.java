@@ -9,6 +9,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.example.annotation.Exclude;
 import org.example.annotation.Logs;
+import org.example.config.security.SecurityUtils;
 import org.example.constant.Result;
 import org.example.mapper.QuestionMapper;
 import org.example.mapper.TaskMapper;
@@ -34,6 +35,10 @@ public class TaskController {
     private static final String CATEGORY_SINGLE = "\u5355\u9009\u9898";
     private static final String CATEGORY_MULTI = "\u591A\u9009\u9898";
     private static final String CATEGORY_ESSAY = "\u7B80\u7B54\u9898";
+    private static final String PAPER_SOURCE_TEACHER = "teacher";
+    private static final String PAPER_SOURCE_STUDENT = "student";
+    private static final String GRADING_MODE_TEACHER = "teacher";
+    private static final String GRADING_MODE_SELF = "self";
 
     @Resource
     private TaskMapper taskMapper;
@@ -108,7 +113,15 @@ public class TaskController {
             return Result.fail(false);
         }
 
-        saveQuestionsAsPaper(paperName, targetScore, difficultyTag, selectedQuestions);
+        saveQuestionsAsPaper(
+                paperName,
+                targetScore,
+                difficultyTag,
+                selectedQuestions,
+                PAPER_SOURCE_TEACHER,
+                null,
+                GRADING_MODE_TEACHER
+        );
         return Result.success(true);
     }
 
@@ -149,11 +162,25 @@ public class TaskController {
         }
 
         String difficultyTag = getDifficultyTag(req);
-        saveQuestionsAsPaper(paperName, totalScore, difficultyTag, orderedQuestions);
+        saveQuestionsAsPaper(
+                paperName,
+                totalScore,
+                difficultyTag,
+                orderedQuestions,
+                PAPER_SOURCE_TEACHER,
+                null,
+                GRADING_MODE_TEACHER
+        );
         return Result.success(true);
     }
 
-    private void saveQuestionsAsPaper(String paperName, Integer totalScore, String difficultyTag, List<Question> questions) {
+    private void saveQuestionsAsPaper(String paperName,
+                                      Integer totalScore,
+                                      String difficultyTag,
+                                      List<Question> questions,
+                                      String paperSource,
+                                      Long ownerUserId,
+                                      String gradingMode) {
         for (Question question : questions) {
             Task task = new Task();
             BeanUtil.copyProperties(question, task);
@@ -175,6 +202,9 @@ public class TaskController {
                     question.getKnowledgePoint(),
                     TagLabelUtils.inferKnowledgePoint(question.getQuestion(), question.getParse(), question.getAnswer(), question.getCategory())
             ));
+            task.setPaperSource(normalizePaperSource(paperSource));
+            task.setOwnerUserId(ownerUserId);
+            task.setGradingMode(normalizeGradingMode(gradingMode));
             task.setId(null);
             taskMapper.insert(task);
         }
@@ -221,6 +251,50 @@ public class TaskController {
         }
     }
 
+    private String normalizePaperSource(String source) {
+        String value = StrUtil.blankToDefault(source, PAPER_SOURCE_TEACHER).trim().toLowerCase(Locale.ROOT);
+        return PAPER_SOURCE_STUDENT.equals(value) ? PAPER_SOURCE_STUDENT : PAPER_SOURCE_TEACHER;
+    }
+
+    private String normalizeGradingMode(String mode) {
+        String value = StrUtil.blankToDefault(mode, GRADING_MODE_TEACHER).trim().toLowerCase(Locale.ROOT);
+        return GRADING_MODE_SELF.equals(value) ? GRADING_MODE_SELF : GRADING_MODE_TEACHER;
+    }
+
+    private void applyPaperSourceFilter(LambdaQueryWrapper<Task> wrapper, String paperSource) {
+        if (PAPER_SOURCE_STUDENT.equals(paperSource)) {
+            wrapper.eq(Task::getPaperSource, PAPER_SOURCE_STUDENT);
+            return;
+        }
+        wrapper.and(item -> item.eq(Task::getPaperSource, PAPER_SOURCE_TEACHER).or().isNull(Task::getPaperSource));
+    }
+
+    private String buildPaperGroupKey(Task task) {
+        if (task == null) {
+            return "";
+        }
+        String name = StrUtil.blankToDefault(task.getName(), "");
+        String source = normalizePaperSource(task.getPaperSource());
+        String ownerId = task.getOwnerUserId() == null ? "0" : String.valueOf(task.getOwnerUserId());
+        return name + "|" + source + "|" + ownerId;
+    }
+
+    private Long getCurrentUserIdSafe() {
+        try {
+            return SecurityUtils.getUserId();
+        } catch (Exception ignore) {
+            return null;
+        }
+    }
+
+    private boolean isRootRoleSafe() {
+        try {
+            return "root".equals(SecurityUtils.getRole());
+        } catch (Exception ignore) {
+            return false;
+        }
+    }
+
     @Logs("Task Action")
     @DeleteMapping("/del")
     public Result<Boolean> del(@RequestParam("id") Long id) {
@@ -264,8 +338,25 @@ public class TaskController {
         int currentPage = ReqUtils.getCurrentPage(req);
         int pageSize = ReqUtils.getPageSize(req);
         String keyword = ReqUtils.getKeyword(req);
+        String paperSource = normalizePaperSource(req.getStr("paperSource"));
+        Long ownerUserId = req.getLong("ownerUserId");
+        boolean isRoot = isRootRoleSafe();
+        Long currentUserId = getCurrentUserIdSafe();
 
         LambdaQueryWrapper<Task> queryWrapper = new LambdaQueryWrapper<>();
+        applyPaperSourceFilter(queryWrapper, paperSource);
+        if (PAPER_SOURCE_STUDENT.equals(paperSource)) {
+            if (isRoot) {
+                if (ownerUserId != null) {
+                    queryWrapper.eq(Task::getOwnerUserId, ownerUserId);
+                }
+            } else {
+                if (currentUserId == null) {
+                    return Result.success(new PageVo(currentPage, pageSize, 0L, Collections.emptyList()));
+                }
+                queryWrapper.eq(Task::getOwnerUserId, currentUserId);
+            }
+        }
         if (StrUtil.isNotBlank(keyword)) {
             queryWrapper.like(Task::getName, keyword);
         }
@@ -275,7 +366,7 @@ public class TaskController {
         fillAndPersistMissingTags(allTasks);
 
         Map<String, List<Task>> grouped = allTasks.stream()
-                .collect(Collectors.groupingBy(Task::getName, LinkedHashMap::new, Collectors.toList()));
+                .collect(Collectors.groupingBy(this::buildPaperGroupKey, LinkedHashMap::new, Collectors.toList()));
 
         List<JSONObject> papers = new ArrayList<>();
         for (Map.Entry<String, List<Task>> entry : grouped.entrySet()) {
@@ -285,12 +376,16 @@ public class TaskController {
             }
             Task latest = paperQuestions.get(0);
             JSONObject paper = new JSONObject();
-            paper.putOpt("name", entry.getKey());
+            paper.putOpt("name", latest.getName());
             paper.putOpt("type", latest.getType());
             paper.putOpt("difficultyTag", latest.getType());
             paper.putOpt("totalScore", latest.getTotalScore());
             paper.putOpt("questionCount", paperQuestions.size());
             paper.putOpt("createTime", latest.getCreateTime());
+            paper.putOpt("createBy", latest.getCreateBy());
+            paper.putOpt("paperSource", normalizePaperSource(latest.getPaperSource()));
+            paper.putOpt("ownerUserId", latest.getOwnerUserId());
+            paper.putOpt("gradingMode", normalizeGradingMode(latest.getGradingMode()));
             paper.putOpt("questionIds", paperQuestions.stream().map(Task::getId).collect(Collectors.toList()));
             papers.add(paper);
         }
@@ -305,12 +400,29 @@ public class TaskController {
 
     @Logs("Task Action")
     @GetMapping("/paperDetails")
-    public Result<List<JSONObject>> paperDetails(@RequestParam("name") String name) {
-        List<Task> tasks = taskMapper.selectList(
-                new LambdaQueryWrapper<Task>()
-                        .eq(Task::getName, name)
-                        .orderByAsc(Task::getCreateTime)
-        );
+    public Result<List<JSONObject>> paperDetails(@RequestParam("name") String name,
+                                                 @RequestParam(value = "paperSource", required = false) String paperSource,
+                                                 @RequestParam(value = "ownerUserId", required = false) Long ownerUserId) {
+        String normalizedSource = normalizePaperSource(paperSource);
+        LambdaQueryWrapper<Task> wrapper = new LambdaQueryWrapper<Task>()
+                .eq(Task::getName, name)
+                .orderByAsc(Task::getCreateTime);
+        applyPaperSourceFilter(wrapper, normalizedSource);
+        if (PAPER_SOURCE_STUDENT.equals(normalizedSource)) {
+            if (isRootRoleSafe()) {
+                if (ownerUserId != null) {
+                    wrapper.eq(Task::getOwnerUserId, ownerUserId);
+                }
+            } else {
+                Long currentUserId = getCurrentUserIdSafe();
+                if (currentUserId == null) {
+                    return Result.success(Collections.emptyList());
+                }
+                wrapper.eq(Task::getOwnerUserId, currentUserId);
+            }
+        }
+
+        List<Task> tasks = taskMapper.selectList(wrapper);
         fillAndPersistMissingTags(tasks);
         List<JSONObject> details = tasks.stream().map(JSONObject::new).collect(Collectors.toList());
         return Result.success(details);
@@ -318,20 +430,87 @@ public class TaskController {
 
     @Logs("Task Action")
     @DeleteMapping("/delPaper")
-    public Result<Boolean> delPaper(@RequestParam("name") String name) {
-        return Result.success(taskMapper.delete(new LambdaQueryWrapper<Task>().eq(Task::getName, name)) > 0);
+    public Result<Boolean> delPaper(@RequestParam("name") String name,
+                                    @RequestParam(value = "paperSource", required = false) String paperSource,
+                                    @RequestParam(value = "ownerUserId", required = false) Long ownerUserId) {
+        String normalizedSource = normalizePaperSource(paperSource);
+        LambdaQueryWrapper<Task> wrapper = new LambdaQueryWrapper<Task>().eq(Task::getName, name);
+        applyPaperSourceFilter(wrapper, normalizedSource);
+        if (PAPER_SOURCE_STUDENT.equals(normalizedSource)) {
+            if (isRootRoleSafe()) {
+                if (ownerUserId != null) {
+                    wrapper.eq(Task::getOwnerUserId, ownerUserId);
+                }
+            } else {
+                Long currentUserId = getCurrentUserIdSafe();
+                if (currentUserId == null) {
+                    return Result.fail(false);
+                }
+                wrapper.eq(Task::getOwnerUserId, currentUserId);
+            }
+        }
+        return Result.success(taskMapper.delete(wrapper) > 0);
+    }
+
+    @Logs("Task Action")
+    @DeleteMapping("/delOwnPaper")
+    public Result<Boolean> delOwnPaper(@RequestParam("name") String name) {
+        Long userId = getCurrentUserIdSafe();
+        if (userId == null || StrUtil.isBlank(name)) {
+            return Result.fail(false);
+        }
+        int removed = taskMapper.delete(new LambdaQueryWrapper<Task>()
+                .eq(Task::getName, name)
+                .eq(Task::getPaperSource, PAPER_SOURCE_STUDENT)
+                .eq(Task::getOwnerUserId, userId));
+        return Result.success(removed > 0);
     }
 
     @GetMapping("/taskName")
-    public Result<List<String>> taskName() {
-        List<String> answer = taskMapper.selectList(null).stream().map(Task::getName).distinct().collect(Collectors.toList());
+    public Result<List<String>> taskName(@RequestParam(value = "paperSource", required = false) String paperSource) {
+        String normalizedSource = normalizePaperSource(paperSource);
+        LambdaQueryWrapper<Task> wrapper = new LambdaQueryWrapper<>();
+        applyPaperSourceFilter(wrapper, normalizedSource);
+        if (PAPER_SOURCE_STUDENT.equals(normalizedSource) && !isRootRoleSafe()) {
+            Long userId = getCurrentUserIdSafe();
+            if (userId == null) {
+                return Result.success(Collections.emptyList());
+            }
+            wrapper.eq(Task::getOwnerUserId, userId);
+        }
+        wrapper.orderByDesc(Task::getCreateTime);
+
+        List<String> answer = taskMapper.selectList(wrapper).stream()
+                .map(Task::getName)
+                .filter(StrUtil::isNotBlank)
+                .distinct()
+                .collect(Collectors.toList());
         return Result.success(answer);
     }
 
     @Exclude(type = "list", value = {"createBy", "createTime", "updateBy", "updateTime", "del", "answer", "parse"})
     @GetMapping("/selectTask")
-    public Result<List<JSONObject>> selectTask(@RequestParam("name") String name) {
-        List<Task> tasks = taskMapper.selectList(new LambdaQueryWrapper<Task>().eq(Task::getName, name));
+    public Result<List<JSONObject>> selectTask(@RequestParam("name") String name,
+                                               @RequestParam(value = "paperSource", required = false) String paperSource,
+                                               @RequestParam(value = "ownerUserId", required = false) Long ownerUserId) {
+        String normalizedSource = normalizePaperSource(paperSource);
+        LambdaQueryWrapper<Task> wrapper = new LambdaQueryWrapper<Task>().eq(Task::getName, name);
+        applyPaperSourceFilter(wrapper, normalizedSource);
+        if (PAPER_SOURCE_STUDENT.equals(normalizedSource)) {
+            if (isRootRoleSafe()) {
+                if (ownerUserId != null) {
+                    wrapper.eq(Task::getOwnerUserId, ownerUserId);
+                }
+            } else {
+                Long userId = getCurrentUserIdSafe();
+                if (userId == null) {
+                    return Result.success(Collections.emptyList());
+                }
+                wrapper.eq(Task::getOwnerUserId, userId);
+            }
+        }
+
+        List<Task> tasks = taskMapper.selectList(wrapper);
         fillAndPersistMissingTags(tasks);
         List<JSONObject> answer = tasks.stream().map(JSONObject::new).collect(Collectors.toList());
         return Result.success(answer);
@@ -340,14 +519,32 @@ public class TaskController {
     @Logs("Task Action")
     @Exclude(type = "list", value = {"createBy", "createTime", "updateBy", "updateTime", "del", "answer", "parse"})
     @GetMapping("/ranTask")
-    public Result<List<JSONObject>> ranTask() {
-        List<Task> tasks = taskMapper.selectList(null);
+    public Result<List<JSONObject>> ranTask(@RequestParam(value = "paperSource", required = false) String paperSource) {
+        String normalizedSource = normalizePaperSource(paperSource);
+        LambdaQueryWrapper<Task> wrapper = new LambdaQueryWrapper<>();
+        applyPaperSourceFilter(wrapper, normalizedSource);
+        if (PAPER_SOURCE_STUDENT.equals(normalizedSource) && !isRootRoleSafe()) {
+            Long userId = getCurrentUserIdSafe();
+            if (userId == null) {
+                return Result.success(Collections.emptyList());
+            }
+            wrapper.eq(Task::getOwnerUserId, userId);
+        }
+
+        List<Task> tasks = taskMapper.selectList(wrapper);
         if (tasks.isEmpty()) {
             return Result.success(Collections.emptyList());
         }
 
         fillAndPersistMissingTags(tasks);
-        List<String> collect = tasks.stream().map(Task::getName).collect(Collectors.toList());
+        List<String> collect = tasks.stream()
+                .map(Task::getName)
+                .filter(StrUtil::isNotBlank)
+                .distinct()
+                .collect(Collectors.toList());
+        if (collect.isEmpty()) {
+            return Result.success(Collections.emptyList());
+        }
         Collections.shuffle(collect);
         String name = collect.get(0);
         List<JSONObject> answer = tasks.stream().filter(item -> item.getName().equals(name)).map(JSONObject::new).collect(Collectors.toList());

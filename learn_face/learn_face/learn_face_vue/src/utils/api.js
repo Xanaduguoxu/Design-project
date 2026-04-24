@@ -411,8 +411,9 @@ export async function getTopForumTopicsAPI() {
 }
 
 // 获取考试任务API
-export async function getTaskAPI() {
-  return apiRequest('/task/ranTask')
+export async function getTaskAPI(params = {}) {
+  const query = params.paperSource ? `?paperSource=${encodeURIComponent(params.paperSource)}` : ''
+  return apiRequest(`/task/ranTask${query}`)
 }
 
 // 提交考试API
@@ -506,13 +507,28 @@ export async function faceLoginAPI(imageBase64) {
 }
 
 // 获取试卷名称列表
-export async function getTaskNamesAPI() {
-  return apiRequest('/task/taskName')
+export async function getTaskNamesAPI(params = {}) {
+  const query = params.paperSource ? `?paperSource=${encodeURIComponent(params.paperSource)}` : ''
+  return apiRequest(`/task/taskName${query}`)
 }
 
 // 根据试卷名称获取试题列表
-export async function selectTaskAPI(name) {
-  return apiRequest(`/task/selectTask?name=${name}`)
+export async function selectTaskAPI(name, params = {}) {
+  const query = new URLSearchParams({ name: String(name || '') })
+  if (params.paperSource) {
+    query.append('paperSource', params.paperSource)
+  }
+  if (params.ownerUserId !== null && params.ownerUserId !== undefined) {
+    query.append('ownerUserId', String(params.ownerUserId))
+  }
+  return apiRequest(`/task/selectTask?${query.toString()}`)
+}
+
+export async function deleteMyPaperAPI(name) {
+  const query = new URLSearchParams({ name: String(name || '') })
+  return apiRequest(`/task/delOwnPaper?${query.toString()}`, {
+    method: 'DELETE'
+  })
 }
 
 // 错题本列表

@@ -2,11 +2,11 @@
   <div class="page-container">
     <div class="search-section">
       <div class="search-header">
-        <h2 class="page-title">试卷管理</h2>
+        <h2 class="page-title">Paper Management</h2>
         <div class="search-controls">
           <el-input
-            v-model="searchForm.keyword"
-            placeholder="搜索试卷名称"
+            v-model.trim="searchForm.keyword"
+            placeholder="Search paper name"
             clearable
             class="modern-search-input"
             @clear="handleSearch"
@@ -14,41 +14,80 @@
           >
             <i slot="prefix" class="el-input__icon el-icon-search"></i>
           </el-input>
-          <el-button type="primary" @click="handleSearch">搜索</el-button>
-          <el-button type="primary" icon="el-icon-plus" @click="openAddDialog">新增试卷</el-button>
+          <el-button type="primary" @click="handleSearch">Search</el-button>
+          <el-button
+            :type="searchForm.paperSource === PAPER_SOURCE_TEACHER ? 'primary' : 'default'"
+            @click="changePaperSource(PAPER_SOURCE_TEACHER)"
+          >
+            Teacher Papers
+          </el-button>
+          <el-button
+            :type="searchForm.paperSource === PAPER_SOURCE_STUDENT ? 'primary' : 'default'"
+            @click="changePaperSource(PAPER_SOURCE_STUDENT)"
+          >
+            Student Papers
+          </el-button>
+          <el-button
+            type="primary"
+            icon="el-icon-plus"
+            :disabled="searchForm.paperSource === PAPER_SOURCE_STUDENT"
+            @click="openAddDialog"
+          >
+            New Paper
+          </el-button>
         </div>
       </div>
     </div>
 
     <div class="table-container">
-      <el-table :data="list" v-loading="loading" stripe row-key="name">
+      <el-table :data="list" v-loading="loading" stripe :row-key="getRowKey">
         <el-table-column type="index" label="#" width="60" align="center" />
-        <el-table-column prop="name" label="试卷名称" min-width="180" />
-        <el-table-column prop="difficultyTag" label="难度标签" width="120" align="center">
+        <el-table-column prop="name" label="Paper Name" min-width="180" />
+
+        <el-table-column prop="paperSource" label="Source" width="110" align="center">
           <template slot-scope="scope">
-            <el-tag size="small" :type="getTypeTagType(scope.row.difficultyTag || scope.row.type)">
-              {{ scope.row.difficultyTag || scope.row.type || '未设置' }}
+            <el-tag size="small" :type="getSourceTagType(scope.row.paperSource)">
+              {{ getSourceLabel(scope.row.paperSource) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="totalScore" label="总分" width="100" align="center" />
-        <el-table-column prop="questionCount" label="题目数量" width="110" align="center" />
-        <el-table-column label="创建时间" min-width="180" align="center">
+
+        <el-table-column
+          v-if="searchForm.paperSource === PAPER_SOURCE_STUDENT"
+          prop="createBy"
+          label="Owner"
+          width="130"
+          align="center"
+        />
+
+        <el-table-column prop="difficultyTag" label="Difficulty" width="120" align="center">
+          <template slot-scope="scope">
+            <el-tag size="small" :type="getTypeTagType(scope.row.difficultyTag || scope.row.type)">
+              {{ formatDifficulty(scope.row.difficultyTag || scope.row.type) || "-" }}
+            </el-tag>
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="totalScore" label="Total Score" width="110" align="center" />
+        <el-table-column prop="questionCount" label="Questions" width="110" align="center" />
+
+        <el-table-column label="Created At" min-width="180" align="center">
           <template slot-scope="scope">
             {{ formatTime(scope.row.createTime) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="220" align="center">
+
+        <el-table-column label="Actions" width="220" align="center">
           <template slot-scope="scope">
-            <el-button type="text" @click="openDetailDialog(scope.row)">查看/编辑题目</el-button>
-            <el-button type="text" class="danger-text" @click="handleDelete(scope.row)">删除试卷</el-button>
+            <el-button type="text" @click="openDetailDialog(scope.row)">View / Edit Questions</el-button>
+            <el-button type="text" class="danger-text" @click="handleDelete(scope.row)">Delete Paper</el-button>
           </template>
         </el-table-column>
       </el-table>
     </div>
 
     <div class="pagination-wrapper">
-      <div class="pagination-info">共 {{ total }} 条</div>
+      <div class="pagination-info">Total {{ total }}</div>
       <el-pagination
         background
         :current-page="currentPage"
@@ -61,19 +100,19 @@
       />
     </div>
 
-    <el-dialog title="新增试卷" :visible.sync="addDialogVisible" width="760px">
-      <el-form ref="addFormRef" :model="addForm" :rules="addRules" label-width="110px">
+    <el-dialog title="Create Paper" :visible.sync="addDialogVisible" width="760px" :close-on-click-modal="false">
+      <el-form ref="addFormRef" :model="addForm" :rules="addRules" label-width="120px">
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="试卷名称" prop="name">
-              <el-input v-model="addForm.name" placeholder="请输入试卷名称" />
+            <el-form-item label="Paper Name" prop="name">
+              <el-input v-model.trim="addForm.name" placeholder="Please input paper name" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="出卷方式" prop="createMode">
+            <el-form-item label="Create Mode" prop="createMode">
               <el-select v-model="addForm.createMode" style="width: 100%">
-                <el-option label="自动出卷" value="auto" />
-                <el-option label="手动出卷" value="manual" />
+                <el-option label="Auto" value="auto" />
+                <el-option label="Manual" value="manual" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -81,22 +120,25 @@
 
         <el-row :gutter="16">
           <el-col :span="12">
-            <el-form-item label="难度标签" prop="type">
-              <el-select v-model="addForm.type" placeholder="请选择难度标签" style="width: 100%">
-                <el-option label="简单" value="简单" />
-                <el-option label="中等" value="中等" />
-                <el-option label="困难" value="困难" />
+            <el-form-item label="Difficulty" prop="type">
+              <el-select v-model="addForm.type" placeholder="Select difficulty" style="width: 100%">
+                <el-option
+                  v-for="item in difficultyOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="试卷总分" prop="totalScore">
+            <el-form-item label="Total Score" prop="totalScore">
               <el-input-number v-model="addForm.totalScore" :min="1" :max="300" style="width: 100%" />
             </el-form-item>
           </el-col>
         </el-row>
 
-        <el-form-item v-if="addForm.createMode === 'manual'" label="选择题目" prop="questionIds">
+        <el-form-item v-if="addForm.createMode === 'manual'" label="Questions" prop="questionIds">
           <el-select
             v-model="addForm.questionIds"
             multiple
@@ -104,7 +146,7 @@
             collapse-tags
             clearable
             style="width: 100%"
-            placeholder="请选择要加入试卷的题目"
+            placeholder="Select questions to include"
           >
             <el-option
               v-for="item in questionBank"
@@ -113,80 +155,100 @@
               :value="item.id"
             />
           </el-select>
-          <div class="helper-text">已选 {{ addForm.questionIds.length }} 题，保存后可继续在“查看/编辑题目”里修改题面内容。</div>
+          <div class="helper-text">
+            Selected {{ addForm.questionIds.length }} questions. You can continue editing questions after creating the paper.
+          </div>
         </el-form-item>
       </el-form>
       <span slot="footer">
-        <el-button @click="addDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="submitLoading" @click="submitAddForm">确定</el-button>
+        <el-button @click="addDialogVisible = false">Cancel</el-button>
+        <el-button type="primary" :loading="submitLoading" @click="submitAddForm">Confirm</el-button>
       </span>
     </el-dialog>
 
-    <el-dialog title="试卷题目详情" :visible.sync="detailDialogVisible" width="1020px">
+    <el-dialog title="Paper Details" :visible.sync="detailDialogVisible" width="1020px">
       <div class="detail-header" v-if="currentPaper">
-        <div>试卷名称：{{ currentPaper.name }}</div>
-        <div>难度标签：{{ currentPaper.difficultyTag || currentPaper.type || '-' }}</div>
-        <div>总分：{{ currentPaper.totalScore }}</div>
-        <div>题目数：{{ detailList.length }}</div>
+        <div>Paper: {{ currentPaper.name }}</div>
+        <div>Source: {{ getSourceLabel(currentPaper.paperSource) }}</div>
+        <div>Difficulty: {{ formatDifficulty(currentPaper.difficultyTag || currentPaper.type) || "-" }}</div>
+        <div>Total: {{ currentPaper.totalScore }}</div>
+        <div>Questions: {{ detailList.length }}</div>
       </div>
+
       <el-table :data="detailList" v-loading="detailLoading" max-height="520">
         <el-table-column type="index" label="#" width="60" align="center" />
-        <el-table-column prop="question" label="题目内容" min-width="260" show-overflow-tooltip />
-        <el-table-column prop="category" label="题型" width="100" align="center" />
-        <el-table-column prop="type" label="难度标签" width="100" align="center" />
-        <el-table-column prop="knowledgePoint" label="知识点标签" min-width="130" show-overflow-tooltip />
-        <el-table-column prop="score" label="分值" width="80" align="center" />
-        <el-table-column prop="answer" label="答案" min-width="120" show-overflow-tooltip />
-        <el-table-column label="操作" width="130" align="center">
+        <el-table-column prop="question" label="Question" min-width="260" show-overflow-tooltip />
+        <el-table-column prop="category" label="Category" width="120" align="center">
           <template slot-scope="scope">
-            <el-button type="text" @click="openEditQuestionDialog(scope.row)">编辑</el-button>
-            <el-button type="text" class="danger-text" @click="handleDeleteQuestion(scope.row)">删除</el-button>
+            {{ formatCategory(scope.row.category) }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="type" label="Difficulty" width="100" align="center">
+          <template slot-scope="scope">
+            {{ formatDifficulty(scope.row.type) || "-" }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="knowledgePoint" label="Knowledge Point" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="score" label="Score" width="80" align="center" />
+        <el-table-column prop="answer" label="Answer" min-width="120" show-overflow-tooltip />
+        <el-table-column label="Actions" width="130" align="center">
+          <template slot-scope="scope">
+            <el-button type="text" @click="openEditQuestionDialog(scope.row)">Edit</el-button>
+            <el-button type="text" class="danger-text" @click="handleDeleteQuestion(scope.row)">Delete</el-button>
           </template>
         </el-table-column>
       </el-table>
       <span slot="footer">
-        <el-button @click="detailDialogVisible = false">关闭</el-button>
+        <el-button @click="detailDialogVisible = false">Close</el-button>
       </span>
     </el-dialog>
 
-    <el-dialog title="编辑题目" :visible.sync="editDialogVisible" width="760px">
-      <el-form ref="editFormRef" :model="editForm" :rules="editRules" label-width="100px">
-        <el-form-item label="题目内容" prop="question">
-          <el-input v-model="editForm.question" type="textarea" :rows="3" placeholder="请输入题目内容" />
+    <el-dialog title="Edit Question" :visible.sync="editDialogVisible" width="760px" :close-on-click-modal="false">
+      <el-form ref="editFormRef" :model="editForm" :rules="editRules" label-width="120px">
+        <el-form-item label="Question" prop="question">
+          <el-input v-model.trim="editForm.question" type="textarea" :rows="3" placeholder="Please input question" />
         </el-form-item>
+
         <el-row :gutter="16">
           <el-col :span="8">
-            <el-form-item label="题型" prop="category">
+            <el-form-item label="Category" prop="category">
               <el-select v-model="editForm.category" style="width: 100%" @change="handleEditCategoryChange">
-                <el-option label="单选题" value="单选题" />
-                <el-option label="多选题" value="多选题" />
-                <el-option label="判断题" value="判断题" />
-                <el-option label="简答题" value="简答题" />
+                <el-option
+                  v-for="item in categoryOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="难度标签" prop="type">
+            <el-form-item label="Difficulty" prop="type">
               <el-select v-model="editForm.type" style="width: 100%">
-                <el-option label="简单" value="简单" />
-                <el-option label="中等" value="中等" />
-                <el-option label="困难" value="困难" />
+                <el-option
+                  v-for="item in difficultyOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="分值" prop="score">
+            <el-form-item label="Score" prop="score">
               <el-input-number v-model="editForm.score" :min="1" :max="100" style="width: 100%" />
             </el-form-item>
           </el-col>
         </el-row>
-        <el-form-item label="知识点标签" prop="knowledgePoint">
-          <el-input v-model="editForm.knowledgePoint" placeholder="请输入知识点标签" />
+
+        <el-form-item label="Knowledge Point" prop="knowledgePoint">
+          <el-input v-model.trim="editForm.knowledgePoint" placeholder="Please input knowledge point" />
         </el-form-item>
-        <el-form-item v-if="isChoiceCategory(editForm.category)" label="选项" prop="choice">
+
+        <el-form-item v-if="isChoiceCategory(editForm.category)" label="Options" prop="choice">
           <div class="choice-input-container">
             <div v-for="(item, index) in editForm.choice" :key="index" class="choice-input-item">
-              <el-input v-model="editForm.choice[index]" :placeholder="`选项${String.fromCharCode(65 + index)}`">
+              <el-input v-model.trim="editForm.choice[index]" :placeholder="`Option ${String.fromCharCode(65 + index)}`">
                 <template slot="prepend">{{ String.fromCharCode(65 + index) }}.</template>
               </el-input>
               <el-button
@@ -197,29 +259,59 @@
                 v-if="editForm.choice.length > 2"
               />
             </div>
-            <el-button type="text" icon="el-icon-plus" @click="addEditChoice" v-if="editForm.choice.length < 6">添加选项</el-button>
+            <el-button type="text" icon="el-icon-plus" @click="addEditChoice" v-if="editForm.choice.length < 6">
+              Add Option
+            </el-button>
           </div>
         </el-form-item>
-        <el-form-item label="标准答案" prop="answer">
-          <el-input v-model="editForm.answer" placeholder="请输入标准答案" />
+
+        <el-form-item label="Answer" prop="answer">
+          <el-input v-model.trim="editForm.answer" placeholder="Please input answer" />
         </el-form-item>
-        <el-form-item label="题目解析" prop="parse">
-          <el-input v-model="editForm.parse" type="textarea" :rows="2" placeholder="请输入题目解析" />
+        <el-form-item label="Explanation" prop="parse">
+          <el-input v-model.trim="editForm.parse" type="textarea" :rows="2" placeholder="Please input explanation" />
         </el-form-item>
       </el-form>
       <span slot="footer">
-        <el-button @click="editDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="editSubmitLoading" @click="submitEditQuestion">保存</el-button>
+        <el-button @click="editDialogVisible = false">Cancel</el-button>
+        <el-button type="primary" :loading="editSubmitLoading" @click="submitEditQuestion">Save</el-button>
       </span>
     </el-dialog>
   </div>
 </template>
 
 <script>
+const PAPER_SOURCE_TEACHER = 'teacher'
+const PAPER_SOURCE_STUDENT = 'student'
+
+const CATEGORY_SINGLE = '\u5355\u9009\u9898'
+const CATEGORY_MULTI = '\u591a\u9009\u9898'
+const CATEGORY_JUDGE = '\u5224\u65ad\u9898'
+const CATEGORY_ESSAY = '\u7b80\u7b54\u9898'
+
+const DIFF_EASY = '\u7b80\u5355'
+const DIFF_MEDIUM = '\u4e2d\u7b49'
+const DIFF_HARD = '\u56f0\u96be'
+
+const CATEGORY_LABEL_MAP = {
+  [CATEGORY_SINGLE]: 'Single Choice',
+  [CATEGORY_MULTI]: 'Multiple Choice',
+  [CATEGORY_JUDGE]: 'True / False',
+  [CATEGORY_ESSAY]: 'Essay'
+}
+
+const DIFF_LABEL_MAP = {
+  [DIFF_EASY]: 'Easy',
+  [DIFF_MEDIUM]: 'Medium',
+  [DIFF_HARD]: 'Hard'
+}
+
 export default {
   name: 'TestPaper',
   data() {
     return {
+      PAPER_SOURCE_TEACHER,
+      PAPER_SOURCE_STUDENT,
       loading: false,
       detailLoading: false,
       submitLoading: false,
@@ -231,7 +323,8 @@ export default {
       currentPage: 1,
       pageSize: 8,
       searchForm: {
-        keyword: ''
+        keyword: '',
+        paperSource: PAPER_SOURCE_TEACHER
       },
       addDialogVisible: false,
       detailDialogVisible: false,
@@ -244,11 +337,22 @@ export default {
         questionIds: []
       },
       questionBank: [],
+      difficultyOptions: [
+        { label: 'Easy', value: DIFF_EASY },
+        { label: 'Medium', value: DIFF_MEDIUM },
+        { label: 'Hard', value: DIFF_HARD }
+      ],
+      categoryOptions: [
+        { label: 'Single Choice', value: CATEGORY_SINGLE },
+        { label: 'Multiple Choice', value: CATEGORY_MULTI },
+        { label: 'True / False', value: CATEGORY_JUDGE },
+        { label: 'Essay', value: CATEGORY_ESSAY }
+      ],
       addRules: {
-        name: [{ required: true, message: '请输入试卷名称', trigger: 'blur' }],
-        createMode: [{ required: true, message: '请选择出卷方式', trigger: 'change' }],
-        type: [{ required: true, message: '请选择难度标签', trigger: 'change' }],
-        totalScore: [{ required: true, message: '请输入试卷总分', trigger: 'blur' }],
+        name: [{ required: true, message: 'Please input paper name', trigger: 'blur' }],
+        createMode: [{ required: true, message: 'Please select create mode', trigger: 'change' }],
+        type: [{ required: true, message: 'Please select difficulty', trigger: 'change' }],
+        totalScore: [{ required: true, message: 'Please input total score', trigger: 'blur' }],
         questionIds: [{
           validator: (rule, value, callback) => {
             if (this.addForm.createMode !== 'manual') {
@@ -259,7 +363,7 @@ export default {
               callback()
               return
             }
-            callback(new Error('手动出卷请至少选择一道题目'))
+            callback(new Error('Manual mode requires at least one question'))
           },
           trigger: 'change'
         }]
@@ -267,8 +371,8 @@ export default {
       editForm: {
         id: '',
         question: '',
-        category: '单选题',
-        type: '',
+        category: CATEGORY_SINGLE,
+        type: DIFF_EASY,
         knowledgePoint: '',
         score: 5,
         choice: ['', '', '', ''],
@@ -276,12 +380,12 @@ export default {
         parse: ''
       },
       editRules: {
-        question: [{ required: true, message: '请输入题目内容', trigger: 'blur' }],
-        category: [{ required: true, message: '请选择题型', trigger: 'change' }],
-        type: [{ required: true, message: '请选择难度标签', trigger: 'change' }],
-        knowledgePoint: [{ required: true, message: '请输入知识点标签', trigger: 'blur' }],
-        answer: [{ required: true, message: '请输入标准答案', trigger: 'blur' }],
-        score: [{ required: true, message: '请输入分值', trigger: 'blur' }]
+        question: [{ required: true, message: 'Please input question', trigger: 'blur' }],
+        category: [{ required: true, message: 'Please select category', trigger: 'change' }],
+        type: [{ required: true, message: 'Please select difficulty', trigger: 'change' }],
+        knowledgePoint: [{ required: true, message: 'Please input knowledge point', trigger: 'blur' }],
+        answer: [{ required: true, message: 'Please input answer', trigger: 'blur' }],
+        score: [{ required: true, message: 'Please input score', trigger: 'blur' }]
       }
     }
   },
@@ -294,38 +398,66 @@ export default {
       this.$http.post('/v1/task/paperList', {
         currentPage: this.currentPage,
         pageSize: this.pageSize,
-        keyword: this.searchForm.keyword
+        keyword: this.searchForm.keyword,
+        paperSource: this.searchForm.paperSource
       }).then(res => {
         if (res.data.code === 200) {
           const pageData = res.data.data || {}
-          this.list = (pageData.data || []).map(item => ({
-            ...item,
-            difficultyTag: item.difficultyTag || item.type || ''
-          }))
-          this.total = pageData.total || 0
+          const rows = Array.isArray(pageData.data) ? pageData.data : []
+          this.list = rows.map(item => this.normalizePaperRow(item))
+          this.total = Number(pageData.total || 0)
         } else {
-          this.$message.error(res.data.message || '获取试卷列表失败')
+          this.$message.error(res.data.message || 'Failed to get paper list')
         }
       }).catch(() => {
-        this.$message.error('获取试卷列表失败')
+        this.$message.error('Failed to get paper list')
       }).finally(() => {
         this.loading = false
       })
     },
+
+    normalizePaperRow(row) {
+      const source = row.paperSource === PAPER_SOURCE_STUDENT ? PAPER_SOURCE_STUDENT : PAPER_SOURCE_TEACHER
+      return {
+        ...row,
+        paperSource: source,
+        difficultyTag: this.normalizeDifficulty(row.difficultyTag || row.type),
+        ownerUserId: row.ownerUserId || null
+      }
+    },
+
+    getRowKey(row) {
+      return `${row.name || ''}-${row.paperSource || PAPER_SOURCE_TEACHER}-${row.ownerUserId || 0}-${row.id || ''}`
+    },
+
+    changePaperSource(source) {
+      this.searchForm.paperSource = source === PAPER_SOURCE_STUDENT ? PAPER_SOURCE_STUDENT : PAPER_SOURCE_TEACHER
+      this.currentPage = 1
+      this.fetchList()
+    },
+
     handleSearch() {
       this.currentPage = 1
       this.fetchList()
     },
+
     handleSizeChange(size) {
       this.pageSize = size
       this.currentPage = 1
       this.fetchList()
     },
+
     handleCurrentChange(page) {
       this.currentPage = page
       this.fetchList()
     },
+
     openAddDialog() {
+      if (this.searchForm.paperSource === PAPER_SOURCE_STUDENT) {
+        this.$message.warning('Student papers are generated by students and cannot be created here.')
+        return
+      }
+
       this.addForm = {
         name: '',
         createMode: 'auto',
@@ -341,6 +473,7 @@ export default {
         }
       })
     },
+
     fetchQuestionBank() {
       this.$http.post('/v1/question/list', {
         currentPage: 1,
@@ -349,23 +482,27 @@ export default {
       }).then(res => {
         if (res.data.code === 200) {
           const pageData = res.data.data || {}
-          this.questionBank = pageData.data || []
+          this.questionBank = Array.isArray(pageData.data) ? pageData.data : []
         } else {
-          this.$message.error(res.data.message || '获取题库失败')
+          this.$message.error(res.data.message || 'Failed to get question bank')
         }
       }).catch(() => {
-        this.$message.error('获取题库失败')
+        this.$message.error('Failed to get question bank')
       })
     },
+
     renderQuestionLabel(item) {
-      const title = item.question || '-'
-      const category = item.category || '-'
-      const score = item.score || 0
-      return `[${category} ${score}分] ${title}`
+      const categoryLabel = this.formatCategory(item.category)
+      const score = Number(item.score || 0)
+      const question = String(item.question || '').replace(/\s+/g, ' ').trim()
+      const briefQuestion = question.length > 60 ? `${question.slice(0, 60)}...` : question
+      return `[${categoryLabel} ${score}pt] ${briefQuestion}`
     },
+
     submitAddForm() {
       this.$refs.addFormRef.validate(valid => {
         if (!valid) return
+
         this.submitLoading = true
         this.$http.post('/v1/task/add', {
           name: this.addForm.name,
@@ -376,95 +513,138 @@ export default {
           questionIds: this.addForm.questionIds
         }).then(res => {
           if (res.data.code === 200 && res.data.data !== false) {
-            this.$message.success('新增试卷成功')
+            this.$message.success('Paper created successfully')
             this.addDialogVisible = false
             this.currentPage = 1
             this.fetchList()
           } else {
-            this.$message.error(res.data.message || '新增试卷失败')
+            this.$message.error(res.data.message || 'Failed to create paper')
           }
         }).catch(() => {
-          this.$message.error('新增试卷失败')
+          this.$message.error('Failed to create paper')
         }).finally(() => {
           this.submitLoading = false
         })
       })
     },
+
     openDetailDialog(row) {
-      this.currentPaper = row
+      this.currentPaper = this.normalizePaperRow(row)
       this.detailDialogVisible = true
       this.detailLoading = true
-      this.$http.get('/v1/task/paperDetails', {
-        params: { name: row.name }
-      }).then(res => {
+
+      const params = {
+        name: row.name,
+        paperSource: row.paperSource || this.searchForm.paperSource
+      }
+      if (row.ownerUserId) {
+        params.ownerUserId = row.ownerUserId
+      }
+
+      this.$http.get('/v1/task/paperDetails', { params }).then(res => {
         if (res.data.code === 200) {
-          this.detailList = (res.data.data || []).map(item => this.normalizeTask(item))
+          const details = Array.isArray(res.data.data) ? res.data.data : []
+          this.detailList = details.map(item => this.normalizeTask(item))
         } else {
-          this.$message.error(res.data.message || '获取试卷详情失败')
+          this.$message.error(res.data.message || 'Failed to get paper details')
         }
       }).catch(() => {
-        this.$message.error('获取试卷详情失败')
+        this.$message.error('Failed to get paper details')
       }).finally(() => {
         this.detailLoading = false
       })
     },
+
     normalizeTask(task) {
+      const category = this.normalizeCategory(task.category)
+      const difficulty = this.normalizeDifficulty(task.type || (this.currentPaper ? this.currentPaper.difficultyTag : ''))
       return {
         ...task,
-        type: task.type || (this.currentPaper ? (this.currentPaper.difficultyTag || this.currentPaper.type) : ''),
+        category,
+        type: difficulty,
         choice: this.parseChoice(task.choice),
         knowledgePoint: task.knowledgePoint || ''
       }
     },
+
     parseChoice(choiceValue) {
-      if (Array.isArray(choiceValue)) return choiceValue
-      if (typeof choiceValue !== 'string') return []
+      if (Array.isArray(choiceValue)) {
+        return choiceValue.map(item => String(item).trim()).filter(Boolean)
+      }
+      if (typeof choiceValue !== 'string') {
+        return []
+      }
+
       const text = choiceValue.trim()
-      if (!text) return []
+      if (!text) {
+        return []
+      }
+
       try {
         const parsed = JSON.parse(text)
-        return Array.isArray(parsed) ? parsed : []
+        return Array.isArray(parsed) ? parsed.map(item => String(item).trim()).filter(Boolean) : []
       } catch (e) {
         return this.parseLegacyChoiceText(text)
       }
     },
+
     parseLegacyChoiceText(text) {
       let normalized = text
       if (normalized.startsWith('[') && normalized.endsWith(']')) {
         normalized = normalized.slice(1, -1).trim()
       }
-      if (!normalized) return []
+      if (!normalized) {
+        return []
+      }
 
-      const lines = normalized.split(/\r?\n/).map(item => item.trim()).filter(Boolean)
+      const lines = normalized.split(/\r?\n/).map(item => this.cleanupChoiceItem(item)).filter(Boolean)
       if (lines.length > 1) {
         return lines
       }
 
       const byLabel = normalized
         .split(/(?=[A-H][\.\)]\s*)/i)
-        .map(item => item.replace(/^[,;\s]+/, '').trim())
+        .map(item => this.cleanupChoiceItem(item))
         .filter(Boolean)
       if (byLabel.length > 1) {
         return byLabel
       }
 
-      return normalized.split(/\s*[,;]\s*/).map(item => item.trim()).filter(Boolean)
+      return normalized
+        .split(/\s*[,;，；]\s*/)
+        .map(item => this.cleanupChoiceItem(item))
+        .filter(Boolean)
     },
+
+    cleanupChoiceItem(text) {
+      return String(text || '')
+        .replace(/^[,;\s]+/, '')
+        .replace(/^[A-H][\.\)]\s*/i, '')
+        .trim()
+    },
+
     isChoiceCategory(category) {
-      return category === '单选题' || category === '多选题'
+      const normalized = this.normalizeCategory(category)
+      return normalized === CATEGORY_SINGLE || normalized === CATEGORY_MULTI
     },
+
     openEditQuestionDialog(row) {
+      const task = this.normalizeTask(row)
+      const choice = this.isChoiceCategory(task.category) ? task.choice.slice() : []
+      const normalizedChoice = choice.length > 0 ? choice : ['', '', '', '']
+
       this.editForm = {
-        id: row.id,
-        question: row.question || '',
-        category: row.category || '单选题',
-        type: row.type || (this.currentPaper ? (this.currentPaper.difficultyTag || this.currentPaper.type) : ''),
-        knowledgePoint: row.knowledgePoint || '',
-        score: Number(row.score) || 5,
-        choice: this.isChoiceCategory(row.category) ? (this.parseChoice(row.choice).length ? this.parseChoice(row.choice) : ['', '', '', '']) : [],
-        answer: row.answer || '',
-        parse: row.parse || ''
+        id: task.id,
+        question: task.question || '',
+        category: task.category || CATEGORY_SINGLE,
+        type: task.type || (this.currentPaper ? this.currentPaper.difficultyTag : DIFF_EASY),
+        knowledgePoint: task.knowledgePoint || '',
+        score: Number(task.score || 5),
+        choice: this.isChoiceCategory(task.category) ? normalizedChoice : [],
+        answer: task.answer || '',
+        parse: task.parse || ''
       }
+
       this.editDialogVisible = true
       this.$nextTick(() => {
         if (this.$refs.editFormRef) {
@@ -472,8 +652,11 @@ export default {
         }
       })
     },
+
     handleEditCategoryChange(value) {
-      if (this.isChoiceCategory(value)) {
+      const normalized = this.normalizeCategory(value)
+      this.editForm.category = normalized
+      if (this.isChoiceCategory(normalized)) {
         if (!Array.isArray(this.editForm.choice) || this.editForm.choice.length === 0) {
           this.editForm.choice = ['', '', '', '']
         }
@@ -482,103 +665,202 @@ export default {
       }
       this.editForm.answer = ''
     },
+
     addEditChoice() {
       if (this.editForm.choice.length < 6) {
         this.editForm.choice.push('')
       }
     },
+
     removeEditChoice(index) {
       if (this.editForm.choice.length > 2) {
         this.editForm.choice.splice(index, 1)
       }
     },
+
     submitEditQuestion() {
       this.$refs.editFormRef.validate(valid => {
         if (!valid) return
+
         this.editSubmitLoading = true
         const payload = {
           id: this.editForm.id,
           name: this.currentPaper ? this.currentPaper.name : '',
           question: this.editForm.question,
-          category: this.editForm.category,
-          type: this.editForm.type,
+          category: this.normalizeCategory(this.editForm.category),
+          type: this.normalizeDifficulty(this.editForm.type),
           knowledgePoint: this.editForm.knowledgePoint,
           answer: this.editForm.answer,
           parse: this.editForm.parse,
           score: Number(this.editForm.score),
-          totalScore: this.currentPaper ? this.currentPaper.totalScore : null,
-          choice: this.isChoiceCategory(this.editForm.category) ? JSON.stringify(this.editForm.choice.filter(Boolean)) : ''
+          totalScore: this.currentPaper ? Number(this.currentPaper.totalScore || 0) : null,
+          choice: this.isChoiceCategory(this.editForm.category)
+            ? JSON.stringify(this.editForm.choice.map(item => String(item).trim()).filter(Boolean))
+            : '',
+          paperSource: this.currentPaper ? this.currentPaper.paperSource : undefined,
+          ownerUserId: this.currentPaper ? this.currentPaper.ownerUserId : undefined
         }
+
         this.$http.post('/v1/task/update', payload).then(res => {
           if (res.data.code === 200 && res.data.data !== false) {
-            this.$message.success('题目更新成功')
+            this.$message.success('Question updated successfully')
             this.editDialogVisible = false
-            this.openDetailDialog(this.currentPaper)
+            if (this.currentPaper) {
+              this.openDetailDialog(this.currentPaper)
+            }
+            this.fetchList()
           } else {
-            this.$message.error(res.data.message || '题目更新失败')
+            this.$message.error(res.data.message || 'Failed to update question')
           }
         }).catch(() => {
-          this.$message.error('题目更新失败')
+          this.$message.error('Failed to update question')
         }).finally(() => {
           this.editSubmitLoading = false
         })
       })
     },
+
     handleDeleteQuestion(row) {
-      this.$confirm('确认删除该题目吗？', '提示', {
+      this.$confirm('Delete this question?', 'Warning', {
         type: 'warning'
       }).then(() => {
         this.$http.delete('/v1/task/del', {
           params: { id: row.id }
         }).then(res => {
           if (res.data.code === 200 && res.data.data !== false) {
-            this.$message.success('题目删除成功')
-            this.openDetailDialog(this.currentPaper)
+            this.$message.success('Question deleted successfully')
+            if (this.currentPaper) {
+              this.openDetailDialog(this.currentPaper)
+            }
             this.fetchList()
           } else {
-            this.$message.error(res.data.message || '题目删除失败')
+            this.$message.error(res.data.message || 'Failed to delete question')
           }
         }).catch(() => {
-          this.$message.error('题目删除失败')
+          this.$message.error('Failed to delete question')
         })
       }).catch(() => {})
     },
+
     handleDelete(row) {
-      this.$confirm(`确认删除试卷「${row.name}」吗？该试卷下所有题目将被删除。`, '提示', {
+      this.$confirm(`Delete paper "${row.name}"? All questions in this paper will be removed.`, 'Warning', {
         type: 'warning'
       }).then(() => {
-        this.$http.delete('/v1/task/delPaper', {
-          params: { name: row.name }
-        }).then(res => {
-          if (res.data.code === 200) {
-            this.$message.success('删除试卷成功')
+        const params = {
+          name: row.name,
+          paperSource: row.paperSource || this.searchForm.paperSource
+        }
+        if (row.ownerUserId) {
+          params.ownerUserId = row.ownerUserId
+        }
+
+        this.$http.delete('/v1/task/delPaper', { params }).then(res => {
+          if (res.data.code === 200 && res.data.data !== false) {
+            this.$message.success('Paper deleted successfully')
             if (this.list.length === 1 && this.currentPage > 1) {
               this.currentPage -= 1
             }
             this.fetchList()
           } else {
-            this.$message.error(res.data.message || '删除试卷失败')
+            this.$message.error(res.data.message || 'Failed to delete paper')
           }
         }).catch(() => {
-          this.$message.error('删除试卷失败')
+          this.$message.error('Failed to delete paper')
         })
       }).catch(() => {})
     },
-    getTypeTagType(type) {
-      const map = {
-        '简单': 'success',
-        '中等': 'warning',
-        '困难': 'danger'
+
+    normalizeCategory(value) {
+      if (!value) {
+        return CATEGORY_ESSAY
       }
-      return map[type] || 'info'
+      const raw = String(value).trim()
+      const lower = raw.toLowerCase()
+
+      if (raw === CATEGORY_SINGLE || lower === 'single') return CATEGORY_SINGLE
+      if (raw === CATEGORY_MULTI || lower === 'multiple') return CATEGORY_MULTI
+      if (raw === CATEGORY_JUDGE || lower === 'judge') return CATEGORY_JUDGE
+      if (raw === CATEGORY_ESSAY || lower === 'essay') return CATEGORY_ESSAY
+      if (raw === '\u5355\u9009') return CATEGORY_SINGLE
+      if (raw === '\u591a\u9009') return CATEGORY_MULTI
+      if (raw === '\u5224\u65ad') return CATEGORY_JUDGE
+      if (raw === '\u7b80\u7b54') return CATEGORY_ESSAY
+      return raw
     },
-    formatTime(timeValue) {
-      if (!timeValue) return '-'
-      if (typeof timeValue === 'string') {
-        return timeValue
+
+    normalizeDifficulty(value) {
+      if (!value) {
+        return ''
       }
+      const raw = String(value).trim()
+      const lower = raw.toLowerCase()
+
+      if (raw === DIFF_EASY || lower === 'easy') return DIFF_EASY
+      if (raw === DIFF_MEDIUM || lower === 'medium') return DIFF_MEDIUM
+      if (raw === DIFF_HARD || lower === 'hard' || lower === 'difficult') return DIFF_HARD
+      return raw
+    },
+
+    formatCategory(value) {
+      const normalized = this.normalizeCategory(value)
+      return CATEGORY_LABEL_MAP[normalized] || normalized || '-'
+    },
+
+    formatDifficulty(value) {
+      const normalized = this.normalizeDifficulty(value)
+      return DIFF_LABEL_MAP[normalized] || normalized || '-'
+    },
+
+    getSourceLabel(source) {
+      return source === PAPER_SOURCE_STUDENT ? 'Student' : 'Teacher'
+    },
+
+    getSourceTagType(source) {
+      return source === PAPER_SOURCE_STUDENT ? 'warning' : 'success'
+    },
+
+    getTypeTagType(type) {
+      const normalized = this.normalizeDifficulty(type)
+      const map = {
+        [DIFF_EASY]: 'success',
+        [DIFF_MEDIUM]: 'warning',
+        [DIFF_HARD]: 'danger'
+      }
+      return map[normalized] || 'info'
+    },
+
+    formatTime(timeValue) {
+      if (!timeValue) {
+        return '-'
+      }
+
+      if (typeof timeValue === 'string') {
+        const text = timeValue.trim()
+        if (!text) {
+          return '-'
+        }
+        if (/^\d+$/.test(text)) {
+          const numeric = Number(text)
+          if (!Number.isNaN(numeric)) {
+            const timestamp = numeric > 9999999999 ? numeric : numeric * 1000
+            return new Date(timestamp).toLocaleString()
+          }
+        }
+        const date = new Date(text)
+        if (!Number.isNaN(date.getTime())) {
+          return date.toLocaleString()
+        }
+        return text
+      }
+
+      if (typeof timeValue === 'number') {
+        const timestamp = timeValue > 9999999999 ? timeValue : timeValue * 1000
+        return new Date(timestamp).toLocaleString()
+      }
+
       try {
-        return new Date(timeValue).toLocaleString()
+        const date = new Date(timeValue)
+        return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString()
       } catch (e) {
         return '-'
       }
