@@ -203,6 +203,7 @@ export default {
       remainingTime: 3600,
       timerInterval: null,
       currentExamName: '',
+      routeExamLoaded: '',
     }
   },
   computed: {
@@ -212,6 +213,14 @@ export default {
   },
   async mounted() {
     await this.fetchExamNames()
+    await this.tryLoadExamFromRoute()
+  },
+  watch: {
+    '$route.query.examName': {
+      handler() {
+        this.tryLoadExamFromRoute()
+      }
+    }
   },
   methods: {
     // 获取试卷列表
@@ -244,6 +253,27 @@ export default {
     },
     
     // 获取题型中文名称
+    async tryLoadExamFromRoute() {
+      const queryExamName = this.$route?.query?.examName
+      const examName = typeof queryExamName === 'string' ? queryExamName.trim() : ''
+      if (!examName) {
+        return
+      }
+      if (this.routeExamLoaded === examName && this.questions.length > 0) {
+        return
+      }
+
+      this.selectedExamName = examName
+      try {
+        await this.fetchExamDataByName(examName)
+        this.showExamSelect = false
+        this.showConfirmDialog = true
+        this.routeExamLoaded = examName
+      } catch (error) {
+        this.routeExamLoaded = ''
+        ElMessage.error(`自动加载试卷失败: ${examName}`)
+      }
+    },
     getCategoryName(category) {
       const categoryMap = {
         '单选题': '单选题',
@@ -636,6 +666,7 @@ export default {
       this.selectedAnswers = {}
       this.remainingTime = 3600
       this.selectedExamName = ''
+      this.routeExamLoaded = ''
       this.questions = []
       this.fetchExamNames()
     },

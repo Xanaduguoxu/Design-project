@@ -19,6 +19,7 @@
       </div>
       <div class="toolbar-row">
         <el-button type="success" :disabled="selectedIds.length === 0" @click="startPractice">开始练习（{{ selectedIds.length }}）</el-button>
+        <el-button type="primary" plain @click="goAutoPaper">智能组卷</el-button>
         <el-button type="danger" plain :disabled="selectedIds.length === 0" @click="removeSelected">批量移除（{{ selectedIds.length }}）</el-button>
         <el-button type="danger" plain @click="removeMastered">移除已掌握</el-button>
         <span class="tip">先勾选题目再开始，客观题提交后立即显示答案，主观题先看答案再自评。</span>
@@ -125,6 +126,7 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   deleteMasteredWrongQuestionsAPI,
@@ -133,6 +135,8 @@ import {
   submitWrongObjectiveAPI,
   submitWrongSubjectiveAPI
 } from '../utils/api'
+
+const router = useRouter()
 
 const filters = reactive({
   keyword: '',
@@ -269,6 +273,10 @@ const handlePageChange = (page) => {
 
 const handleSelectionChange = (rows) => {
   selectedRows.value = rows || []
+}
+
+const goAutoPaper = () => {
+  router.push('/auto-paper')
 }
 
 const statusText = (status) => {

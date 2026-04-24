@@ -553,3 +553,19 @@ export async function deleteMasteredWrongQuestionsAPI() {
     method: 'POST'
   })
 }
+
+// 薄弱点画像
+export async function getWrongWeaknessProfileAPI(params = {}) {
+  return apiRequest('/wrong/weaknessProfile', {
+    method: 'POST',
+    body: JSON.stringify(params)
+  })
+}
+
+// 个性化自动组卷
+export async function generatePersonalizedPaperAPI(params) {
+  return apiRequest('/wrong/generatePaper', {
+    method: 'POST',
+    body: JSON.stringify(params)
+  })
+}
