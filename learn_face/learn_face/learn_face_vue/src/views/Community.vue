@@ -1,6 +1,6 @@
 <template>
   <main class="brutalist-community">
-    <!-- 顶部横幅 -->
+    <!-- Top Banner -->
     <section class="hero-poster-section">
       <div class="container">
         <div class="poster-content">
@@ -47,16 +47,16 @@
             </div>
           </div>
 
-          <!-- 加载状态 -->
+          <!-- Loading -->
           <div v-if="loading" class="loading-box">
             <div class="loading-spinner-brutal"></div>
             <p>COMPILING DATA...</p>
           </div>
 
-          <!-- 帖子列表容器 -->
+          <!-- Posts Container -->
           <div v-else :class="['posts-container-brutal', `mode-${viewMode}`]">
             <div v-for="post in displayedPosts" :key="post.id" class="post-card-brutal" @click="viewPost(post)">
-              <!-- 卡片模式封面 -->
+              <!-- Card Cover -->
               <div v-if="viewMode === 'card' && post.images && post.images.length > 0" class="card-img-box">
                 <img :src="post.images[0]" alt="cover" />
                 <div class="img-count-badge" v-if="post.images.length > 1">
@@ -79,10 +79,10 @@
 
                 <h3 class="title-text-brutal">{{ post.title }}</h3>
 
-                <!-- 列表模式摘要 -->
+                <!-- List Excerpt -->
                 <p class="excerpt-text-brutal">{{ post.excerpt }}</p>
 
-                <!-- 列表模式图片 -->
+                <!-- List Images -->
                 <div v-if="viewMode === 'list' && post.images && post.images.length > 0" class="list-img-strip">
                   <div v-for="(img, index) in post.images.slice(0, 3)" :key="index" class="strip-img">
                     <img :src="img" :alt="`img${index}`" />
@@ -103,7 +103,7 @@
             </div>
           </div>
 
-          <!-- 分页 -->
+          <!-- Pagination -->
           <div class="pagination-box-brutal">
             <el-pagination v-model:current-page="currentPage" :page-size="pageSize" :total="totalPosts" background
               layout="prev, pager, next" @current-change="handlePageChange" class="pager-brutal" />
@@ -112,7 +112,7 @@
       </el-row>
     </div>
 
-    <!-- 发帖对话框 -->
+    <!-- New Post Dialog -->
     <el-dialog v-model="showPostDialog" title="CREATE NEW THREAD" width="700px" :close-on-click-modal="false"
       class="dialog-brutal">
       <el-form :model="postForm" label-position="top" class="form-brutal">
@@ -121,9 +121,20 @@
         </el-form-item>
 
         <el-form-item label="TAGS" required>
-          <el-select v-model="postForm.tags" multiple placeholder="SELECT_TAGS" style="width: 100%">
+          <el-select
+            v-model="postForm.tags"
+            multiple
+            filterable
+            allow-create
+            default-first-option
+            reserve-keyword
+            :teleported="false"
+            placeholder="TYPE_TAG_AND_PRESS_ENTER"
+            style="width: 100%"
+          >
             <el-option v-for="tag in availableTags" :key="tag" :label="tag" :value="tag" />
           </el-select>
+          <div class="tag-hint">Support custom tags. Type and press Enter to add.</div>
         </el-form-item>
 
         <el-form-item label="CONTENT" required>
@@ -152,16 +163,25 @@
 </template>
 
 <script>
-import {
-  Edit, Plus, Menu, Grid
-} from '@element-plus/icons-vue'
+import { Edit, Plus, Menu, Grid } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getForumPostsAPI, addForumPostAPI, uploadFileAPI } from '@/utils/api.js'
+
+const createDefaultPostForm = () => ({
+  title: '',
+  content: '',
+  tags: [],
+  images: [],
+  imageUrls: []
+})
 
 export default {
   name: 'Community',
   components: {
-    Edit, Plus, Menu, Grid
+    Edit,
+    Plus,
+    Menu,
+    Grid
   },
   data() {
     return {
@@ -170,37 +190,59 @@ export default {
       currentPage: 1,
       pageSize: 8,
       totalPosts: 0,
-
       showPostDialog: false,
       posting: false,
-
-      postForm: {
-        title: '',
-        content: '',
-        tags: [],
-        images: [],
-        imageUrls: []
-      },
-
-      availableTags: [],
-
+      postForm: createDefaultPostForm(),
+      availableTags: ['提问', '经验分享', '学习笔记'],
       posts: [],
       loading: false
     }
   },
-
   mounted() {
     this.fetchPosts()
   },
-
   computed: {
     displayedPosts() {
-      let filtered = [...this.posts]
-      return filtered
+      return [...this.posts]
     }
   },
-
   methods: {
+    normalizeTags(tags) {
+      if (!Array.isArray(tags)) return []
+      return [...new Set(tags.map(tag => String(tag || '').trim()).filter(Boolean))].slice(0, 10)
+    },
+
+    collectAvailableTags(posts) {
+      const tagSet = new Set(this.availableTags)
+      posts.forEach(post => {
+        this.normalizeTags(post.tags).forEach(tag => tagSet.add(tag))
+      })
+      return Array.from(tagSet).slice(0, 50)
+    },
+
+    normalizeImageUrls(urls) {
+      if (!Array.isArray(urls)) return []
+      return urls.map(url => String(url || '').trim()).filter(Boolean)
+    },
+
+    generateExcerpt(content) {
+      if (!content || typeof content !== 'string') return ''
+      const cleanContent = content.replace(/[#*`~\[\]()<>]/g, '').replace(/\n/g, ' ')
+      return cleanContent.length > 100 ? `${cleanContent.substring(0, 100)}...` : cleanContent
+    },
+
+    formatTime(time) {
+      if (!time) return '刚刚'
+      const normalizedTime = typeof time === 'string' ? time.replace(' ', 'T') : time
+      const date = new Date(normalizedTime)
+      if (Number.isNaN(date.getTime())) return String(time)
+      return date.toLocaleDateString()
+    },
+
+    resetPostForm() {
+      this.postForm = createDefaultPostForm()
+    },
+
     async fetchPosts() {
       this.loading = true
       try {
@@ -209,49 +251,35 @@ export default {
           pageSize: this.pageSize,
           category: ''
         }
-
         const response = await getForumPostsAPI(params)
+        const list = response && Array.isArray(response.data) ? response.data : []
 
-        if (response && response.data && Array.isArray(response.data)) {
-          this.posts = response.data.map(item => ({
-            id: item.id,
-            userName: item.author || '匿名用户',
-            userAvatar: item.avatar || '',
-            title: item.title || '无标题',
-            excerpt: this.generateExcerpt(item.content),
-            content: item.content || '',
-            images: item.imageArr || [],
-            tags: item.tags || [],
-            views: item.views || 0,
-            likes: item.likes || 0,
-            time: this.formatTime(),
-            isEssence: item.isEssence || false,
-            isHot: item.views > 1000
-          }))
+        this.posts = list.map(item => ({
+          id: item.id,
+          userName: item.author || '匿名用户',
+          userAvatar: item.avatar || '',
+          title: item.title || '无标题',
+          excerpt: this.generateExcerpt(item.content),
+          content: item.content || '',
+          images: Array.isArray(item.imageArr) ? item.imageArr : [],
+          tags: this.normalizeTags(item.tags),
+          views: item.views || 0,
+          likes: item.likes || 0,
+          time: this.formatTime(item.createTime),
+          isEssence: Boolean(item.isEssence),
+          isHot: (item.views || 0) > 1000
+        }))
 
-          this.totalPosts = response.total || 0
-        } else {
-          this.posts = []
-          this.totalPosts = 0
-        }
+        this.totalPosts = typeof response?.total === 'number' ? response.total : list.length
+        this.availableTags = this.collectAvailableTags(this.posts)
       } catch (error) {
-        console.error('获取帖子列表失败:', error)
+        console.error('fetch forum posts failed:', error)
         ElMessage.error('获取帖子列表失败，请稍后重试')
         this.posts = []
         this.totalPosts = 0
       } finally {
         this.loading = false
       }
-    },
-
-    generateExcerpt(content) {
-      if (!content || typeof content !== 'string') return ''
-      const cleanContent = content.replace(/[#*`~\[\]()<>]/g, '').replace(/\n/g, ' ')
-      return cleanContent.length > 100 ? cleanContent.substring(0, 100) + '...' : cleanContent
-    },
-
-    formatTime() {
-      return '刚刚'
     },
 
     handleTabChange() {
@@ -268,73 +296,77 @@ export default {
     viewPost(post) {
       if (post && post.id) {
         this.$router.push(`/post/${post.id}`)
-      } else {
-        console.error('Invalid post data:', post)
-        ElMessage.error('无法查看帖子详情')
+        return
       }
+      console.error('invalid post data:', post)
+      ElMessage.error('无法查看帖子详情')
     },
 
     async handleImageUpload(file) {
+      if (!file || !file.raw) return
       try {
         const imageUrl = await uploadFileAPI(file.raw)
-        this.postForm.imageUrls.push(imageUrl)
+        if (!imageUrl) return
+        file.url = imageUrl
+        if (!this.postForm.imageUrls.includes(imageUrl)) {
+          this.postForm.imageUrls.push(imageUrl)
+        }
       } catch (error) {
-        ElMessage.error('图片上传失败: ' + (error.message || '未知错误'))
+        ElMessage.error(`图片上传失败: ${error.message || '未知错误'}`)
       }
     },
 
     handleImageRemove(file) {
-      const index = this.postForm.imageUrls.findIndex(url => url === file.url)
-      if (index !== -1) {
-        this.postForm.imageUrls.splice(index, 1)
-      }
+      const removedUrl = file && file.url ? file.url : ''
+      if (!removedUrl) return
+      this.postForm.imageUrls = this.postForm.imageUrls.filter(url => url !== removedUrl)
     },
 
     async submitPost() {
-      if (!this.postForm.title.trim()) {
+      const title = String(this.postForm.title || '').trim()
+      const content = String(this.postForm.content || '').trim()
+      const tags = this.normalizeTags(this.postForm.tags)
+      const imageArr = this.normalizeImageUrls(this.postForm.imageUrls)
+
+      if (!title) {
         ElMessage.warning('请输入帖子标题')
         return
       }
 
-      if (this.postForm.tags.length === 0) {
-        ElMessage.warning('请选择至少一个标签')
-        return
-      }
-
-      if (!this.postForm.content.trim()) {
+      if (!content) {
         ElMessage.warning('请输入帖子内容')
         return
       }
 
-      this.posting = true
+      if (tags.length === 0) {
+        ElMessage.warning('请至少添加一个标签')
+        return
+      }
 
+      this.posting = true
       try {
         const postData = {
           bio: '',
-          title: this.postForm.title,
-          content: this.postForm.content,
-          imageArr: this.postForm.imageUrls,
-          tags: this.postForm.tags
+          title,
+          content,
+          imageArr,
+          tags
         }
 
         const response = await addForumPostAPI(postData)
-
-        if (response) {
-          ElMessage.success('帖子发布成功')
-          this.showPostDialog = false
-          this.postForm = {
-            title: '',
-            content: '',
-            tags: [],
-            images: [],
-            imageUrls: []
-          }
-          this.fetchPosts()
-        } else {
+        const isSuccess = response === true
+        if (!isSuccess) {
           ElMessage.error('帖子发布失败')
+          return
         }
+
+        ElMessage.success('帖子发布成功')
+        this.showPostDialog = false
+        this.resetPostForm()
+        this.currentPage = 1
+        await this.fetchPosts()
       } catch (error) {
-        ElMessage.error('发布帖子失败: ' + (error.message || '未知错误'))
+        ElMessage.error(`发布帖子失败: ${error.message || '未知错误'}`)
       } finally {
         this.posting = false
       }
@@ -672,6 +704,13 @@ export default {
   padding: 2px 6px;
   border: 1px solid #111;
   color: #111;
+}
+
+.tag-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #666;
+  line-height: 1.4;
 }
 
 /* Dialog */

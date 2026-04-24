@@ -7,7 +7,6 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.example.annotation.Exclude;
 import org.example.annotation.Logs;
-import org.example.config.security.LoginUser;
 import org.example.config.security.SecurityUtils;
 import org.example.constant.Result;
 import org.example.mapper.ForumMapper;
@@ -40,8 +39,14 @@ public class ForumController {
         BeanUtil.copyProperties(req, forum);
         forum.setLikes(0);
         forum.setViews(0);
-        User loginUser = SecurityUtils.getUser();
-        forum.setAuthor(loginUser.getNickname());
+        Long loginUserId = SecurityUtils.getUserId();
+        User loginUser = userMapper.selectById(loginUserId);
+        if (loginUser == null) {
+            Result<Boolean> result = Result.fail(false);
+            result.setMessage("用户不存在或登录状态无效");
+            return result;
+        }
+        forum.setAuthor(StrUtil.blankToDefault(loginUser.getNickname(), loginUser.getUsername()));
         forum.setAvatar(loginUser.getAvatar());
         return Result.success(forumMapper.insert(forum) > 0);
     }

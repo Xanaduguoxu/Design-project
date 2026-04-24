@@ -1,22 +1,16 @@
 package org.example.config.security;
 
 import cn.hutool.core.bean.BeanUtil;
-import org.example.mapper.UserMapper;
-import org.example.pojo.po.User;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
-import javax.annotation.Resource;
 import java.util.Map;
 
 /**
  * 功能描述:security工具类
  */
 public class SecurityUtils {
-
-    @Resource
-    private static UserMapper userMapper;
 
     /**
      * 功能描述: 密码加密
@@ -58,8 +52,4 @@ public class SecurityUtils {
         return getLoginUser().getRole();
     }
 
-    public static User getUser() {
-        Long id = getUserId();
-        return userMapper.selectById(id);
-    }
 }
